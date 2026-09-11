@@ -1,0 +1,39 @@
+services:
+  # 1. FastAPI Python Backend Service
+  - type: web
+    name: jaldrishti-api
+    runtime: python
+    region: singapore
+    plan: free
+    buildCommand: "pip install -r backend/requirements.txt"
+    startCommand: "python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    rootDir: backend
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: false
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: SECRET_KEY
+        generateValue: true
+
+  # 2. Next.js Frontend Web Application
+  - type: web
+    name: jaldrishti-web
+    runtime: node
+    region: singapore
+    plan: free
+    buildCommand: "npm install && npm run build"
+    startCommand: "npm start"
+    rootDir: frontend
+    envVars:
+      - key: NODE_VERSION
+        value: 20.12.0
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          type: web
+          name: jaldrishti-api
+          property: host
