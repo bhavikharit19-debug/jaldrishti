@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 120" fill="none">
+  <defs>
+    <linearGradient id="saffronGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#EA580C" />
+      <stop offset="100%" stop-color="#F97316" />
+    </linearGradient>
+    <linearGradient id="navyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F172A" />
+      <stop offset="100%" stop-color="#1E3A8A" />
+    </linearGradient>
+    <linearGradient id="waterGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="100%" stop-color="#0284C7" />
+    </linearGradient>
+    <linearGradient id="greenGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#15803D" />
+      <stop offset="100%" stop-color="#22C55E" />
+    </linearGradient>
+    <filter id="iconShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#0F172A" flood-opacity="0.1" />
+    </filter>
+  </defs>
+  <g transform="translate(8, 14)" filter="url(#iconShadow)">
+    <path d="M 36 20 L 36 64 C 36 78, 25 86, 12 86 C 4 86, -1 83, -4 80 L 2 68 C 4 70, 7 72, 11 72 C 17 72, 23 67, 23 58 L 23 20 Z" fill="url(#saffronGrad)" />
+    <circle cx="29.5" cy="9" r="6" fill="url(#saffronGrad)" />
+    <path d="M 44 14 L 76 14 C 106 14, 126 31, 126 53 C 126 75, 106 92, 76 92 L 44 92 Z" fill="url(#navyGrad)" />
+    <path d="M 57 27 L 74 27 C 93 27, 109 38, 109 53 C 109 68, 93 79, 74 79 L 57 79 Z" fill="#FFFFFF" />
+    <path d="M 83 33 C 83 33, 71 48, 71 58 C 71 61, 72 64, 74 66 C 79 62, 87 62, 92 66 C 94 64, 95 61, 95 58 C 95 48, 83 33, 83 33 Z" fill="url(#waterGrad)" />
+    <path d="M 74 66 C 72 68.5, 71 71, 71 73 C 71 79.6, 76.4 85, 83 85 C 89.6 85, 95 79.6, 95 73 C 95 71, 94 68.5, 92 66 C 87 62, 79 62, 74 66 Z" fill="url(#greenGrad)" />
+    <path d="M 73 66 Q 83 70, 93 66" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" fill="none" />
+    <ellipse cx="79" cy="48" rx="2" ry="4" transform="rotate(-25 79 48)" fill="#FFFFFF" opacity="0.65" />
+  </g>
+</svg>

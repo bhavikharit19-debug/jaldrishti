@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 120" fill="none">
+  <defs>
+    <!-- Saffron Gradient for J -->
+    <linearGradient id="saffronGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#EA580C" />
+      <stop offset="100%" stop-color="#F97316" />
+    </linearGradient>
+
+    <!-- Deep Navy Gradient for D Spine -->
+    <linearGradient id="navyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F172A" />
+      <stop offset="100%" stop-color="#1E3A8A" />
+    </linearGradient>
+
+    <!-- Water Azure Gradient -->
+    <linearGradient id="waterGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="100%" stop-color="#0284C7" />
+    </linearGradient>
+
+    <!-- Green Watershed Wave Gradient -->
+    <linearGradient id="greenGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#15803D" />
+      <stop offset="100%" stop-color="#22C55E" />
+    </linearGradient>
+
+    <!-- Filter for subtle drop shadow -->
+    <filter id="logoShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#0F172A" flood-opacity="0.1" />
+    </filter>
+  </defs>
+
+  <!-- ================= JD MONOGRAM ICON ================= -->
+  <g transform="translate(15, 12)" filter="url(#logoShadow)">
+    <!-- Letter J (Saffron) -->
+    <path d="M 36 20 
+             L 36 64 
+             C 36 78, 25 86, 12 86 
+             C 4 86, -1 83, -4 80 
+             L 2 68 
+             C 4 70, 7 72, 11 72 
+             C 17 72, 23 67, 23 58 
+             L 23 20 
+             Z" 
+          fill="url(#saffronGrad)" />
+
+    <!-- Saffron Accent Dot on J -->
+    <circle cx="29.5" cy="9" r="6" fill="url(#saffronGrad)" />
+
+    <!-- Letter D Outer Bowl (Deep Navy) -->
+    <path d="M 44 14 
+             L 76 14 
+             C 106 14, 126 31, 126 53 
+             C 126 75, 106 92, 76 92 
+             L 44 92 
+             Z" 
+          fill="url(#navyGrad)" />
+
+    <!-- Letter D Inner Counter -->
+    <path d="M 57 27 
+             L 74 27 
+             C 93 27, 109 38, 109 53 
+             C 109 68, 93 79, 74 79 
+             L 57 79 
+             Z" 
+          fill="#FFFFFF" />
+
+    <!-- WATER DROP & WAVE MOTIF INSIDE D -->
+    <!-- Water Drop Upper Body (Azure/Blue) -->
+    <path d="M 83 33 
+             C 83 33, 71 48, 71 58 
+             C 71 61, 72 64, 74 66 
+             C 79 62, 87 62, 92 66 
+             C 94 64, 95 61, 95 58 
+             C 95 48, 83 33, 83 33 
+             Z" 
+          fill="url(#waterGrad)" />
+
+    <!-- Water Drop Lower Base (Green Watershed Wave) -->
+    <path d="M 74 66 
+             C 72 68.5, 71 71, 71 73 
+             C 71 79.6, 76.4 85, 83 85 
+             C 89.6 85, 95 79.6, 95 73 
+             C 95 71, 94 68.5, 92 66 
+             C 87 62, 79 62, 74 66 
+             Z" 
+          fill="url(#greenGrad)" />
+
+    <!-- Wave Ripple Line Inside Drop -->
+    <path d="M 73 66 Q 83 70, 93 66" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" fill="none" />
+    
+    <!-- Water Glint -->
+    <ellipse cx="79" cy="48" rx="2" ry="4" transform="rotate(-25 79 48)" fill="#FFFFFF" opacity="0.65" />
+  </g>
+
+  <!-- ================= WORDMARK & SUPPORTING TEXT ================= -->
+  <g transform="translate(152, 22)">
+    <!-- Main Wordmark: JalDrishti -->
+    <text x="0" y="44" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="42" font-weight="800" letter-spacing="-0.5px">
+      <tspan fill="#0F172A">Jal</tspan><tspan fill="#0284C7">Drishti</tspan>
+    </text>
+
+    <!-- Tricolor Inspired Subtle Bar -->
+    <g transform="translate(0, 53)">
+      <rect x="0" y="0" width="34" height="3" rx="1.5" fill="#EA580C" />
+      <rect x="38" y="0" width="26" height="3" rx="1.5" fill="#0284C7" />
+      <rect x="68" y="0" width="34" height="3" rx="1.5" fill="#16A34A" />
+    </g>
+
+    <!-- Supporting Text -->
+    <text x="0" y="72" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="11.5" font-weight="600" fill="#475569" letter-spacing="0.25px">
+      Watershed Monitoring &amp; Geospatial Decision Support System
+    </text>
+  </g>
+</svg>

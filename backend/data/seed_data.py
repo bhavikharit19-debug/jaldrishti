@@ -1,0 +1,1165 @@
+import datetime
+import json
+from sqlalchemy.orm import Session
+from app.models.domain import (
+    State, District, Watershed, WatershedBoundary, DataSource,
+    GISLayer, FieldPhoto, Observation, Indicator, IndicatorValue,
+    Prediction, RiskAssessment, Recommendation, Intervention,
+    Alert, AuditLog, GeospatialDataset, User, AccessRequest
+)
+
+def seed_database(db: Session, force_refresh: bool = False):
+    # Check if already seeded with Phase 2 layers
+    existing_veg = db.query(GISLayer).filter(GISLayer.layer_type == "VEGETATION_NDVI").first()
+    if existing_veg and not force_refresh:
+        print("Database already contains Phase 2 GIS layers.")
+        return
+
+    # If watersheds exist but Phase 2 layers are missing, remove old layers to reseed cleanly
+    existing_ws = db.query(Watershed).first()
+    if existing_ws:
+        print("Upgrading database to Phase 2: GIS Intelligence & Geospatial Data Layers...")
+        db.query(GISLayer).delete()
+        db.commit()
+    else:
+        print("Seeding JalDrishti AI database with full multi-watershed geospatial dataset...")
+
+    # 1. States & Districts
+    mh = db.query(State).filter(State.code == "MH").first()
+    if not mh:
+        mh = State(code="MH", name="Maharashtra")
+        db.add(mh)
+        db.flush()
+
+    rj = db.query(State).filter(State.code == "RJ").first()
+    if not rj:
+        rj = State(code="RJ", name="Rajasthan")
+        db.add(rj)
+        db.flush()
+
+    ahmednagar = db.query(District).filter(District.code == "MH-AHM").first()
+    if not ahmednagar:
+        ahmednagar = District(name="Ahmednagar", code="MH-AHM", state_id=mh.id)
+        db.add(ahmednagar)
+        db.flush()
+
+    alwar = db.query(District).filter(District.code == "RJ-ALW").first()
+    if not alwar:
+        alwar = District(name="Alwar", code="RJ-ALW", state_id=rj.id)
+        db.add(alwar)
+        db.flush()
+
+    # 2. Indicators Definition
+    if not db.query(Indicator).first():
+        ind_ndvi = Indicator(
+            code="NDVI",
+            name="Normalized Difference Vegetation Index",
+            category="VEGETATION",
+            unit="Index (-0.2 to 1.0)",
+            description="Vegetation vigor and biomass canopy density derived from optical satellite bands.",
+            weight_in_health_score=0.25
+        )
+        ind_ndwi = Indicator(
+            code="NDWI",
+            name="Normalized Difference Water Index",
+            category="HYDROLOGICAL",
+            unit="Index (-1.0 to 1.0)",
+            description="Surface water presence and leaf water content.",
+            weight_in_health_score=0.25
+        )
+        ind_smi = Indicator(
+            code="SMI",
+            name="Soil Moisture Index",
+            category="HYDROLOGICAL",
+            unit="Percentage (%)",
+            description="Estimated root-zone moisture level from satellite microwave/optical thermal indices.",
+            weight_in_health_score=0.20
+        )
+        ind_water_spread = Indicator(
+            code="WATER_SPREAD",
+            name="Surface Water Spread Area",
+            category="HYDROLOGICAL",
+            unit="Hectares (ha)",
+            description="Total surface water spread across water retention structures and ponds.",
+            weight_in_health_score=0.15
+        )
+        ind_erosion = Indicator(
+            code="EROSION_INDEX",
+            name="Soil Loss Susceptibility",
+            category="LAND_CONDITION",
+            unit="Index (0 to 10)",
+            description="Soil degradation and sediment detachment propensity based on slope and cover.",
+            weight_in_health_score=0.15
+        )
+        db.add_all([ind_ndvi, ind_ndwi, ind_smi, ind_water_spread, ind_erosion])
+        db.flush()
+
+    # 3. Data Sources
+    if not db.query(DataSource).first():
+        src_demo = DataSource(
+            code="DEMO-BASELINE-2024",
+            name="JalDrishti Calibrated Baseline Seed",
+            source_type="DEMO DATA",
+            provider_name="JalDrishti AI Geospatial Laboratory",
+            description="Pre-calibrated benchmark spatial indicators and boundaries for SIH 26015 decision-support prototyping.",
+            reliability_score=0.98
+        )
+        src_bhuvan = DataSource(
+            code="ISRO-BHUVAN-API",
+            name="ISRO Bhuvan Watershed Spatial Layer",
+            source_type="OFFICIAL DATA",
+            provider_name="National Remote Sensing Centre (NRSC / ISRO)",
+            description="Official micro-watershed boundaries and LULC datasets (Planned API adapter).",
+            reliability_score=0.99
+        )
+        db.add_all([src_demo, src_bhuvan])
+        db.flush()
+
+    # ==========================================
+    # WATERSHED 1: Hiware Bazar (Ahmednagar, MH)
+    # ==========================================
+    ws_hiware = db.query(Watershed).filter(Watershed.code == "WS-MH-AHM-001").first()
+    if not ws_hiware:
+        ws_hiware = Watershed(
+            code="WS-MH-AHM-001",
+            name="Hiware Bazar Model Micro-Watershed",
+            district_id=ahmednagar.id,
+            state_id=mh.id,
+            area_hectares=976.0,
+            river_basin="Krishna-Godavari Inter-basin",
+            sub_basin="Kukadi Sub-basin",
+            agro_climatic_zone="Scarcity Zone of Maharashtra (Rain-shadow Western Ghats)",
+            primary_drainage="Ephemeral dendritic stream network draining eastwards",
+            health_score=82.5,
+            risk_level="LOW",
+            status="ACTIVE"
+        )
+        db.add(ws_hiware)
+        db.flush()
+
+        hb_coords = [
+            [74.582, 19.035],
+            [74.595, 19.028],
+            [74.620, 19.034],
+            [74.632, 19.052],
+            [74.625, 19.068],
+            [74.601, 19.065],
+            [74.586, 19.055],
+            [74.582, 19.035]
+        ]
+        db.add(WatershedBoundary(
+            watershed_id=ws_hiware.id,
+            geometry={"type": "Polygon", "coordinates": [hb_coords]},
+            centroid_lat=19.048,
+            centroid_lng=74.605,
+            bbox=[74.582, 19.028, 74.632, 19.068]
+        ))
+
+    # --- Phase 2 GIS Layers for Hiware Bazar ---
+    # 1. Drainage Network
+    hb_drainage = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"name": "Main Nala", "order": 3, "length_km": 4.2, "flow_direction": "Eastwards", "gradient": "1.2%"},
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": [[74.588, 19.061], [74.596, 19.052], [74.605, 19.046], [74.618, 19.039]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"name": "North Ridge Tributary", "order": 2, "length_km": 2.1, "flow_direction": "South-East", "gradient": "3.5%"},
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": [[74.612, 19.064], [74.608, 19.053], [74.605, 19.046]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"name": "South Upper Gully", "order": 1, "length_km": 1.4, "flow_direction": "North-East", "gradient": "4.8%"},
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": [[74.591, 19.032], [74.598, 19.040], [74.605, 19.046]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"name": "West Ridge Drainage", "order": 1, "length_km": 1.1, "flow_direction": "South-East", "gradient": "5.1%"},
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": [[74.585, 19.055], [74.592, 19.052], [74.596, 19.052]]
+                }
+            }
+        ]
+    }
+    db.add(GISLayer(
+        watershed_id=ws_hiware.id,
+        layer_type="DRAINAGE",
+        name="Drainage & Stream Network",
+        format="GEOJSON",
+        data_payload=hb_drainage,
+        metadata_json={"stream_orders": [1, 2, 3], "total_streams": 4, "total_length_km": 8.8, "drainage_density_km_sqkm": 0.90}
+    ))
+
+    # 2. Water Bodies
+    hb_water = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"name": "Central Percolation Tank", "type": "Percolation Tank", "capacity_tcm": 45.0, "spread_area_ha": 4.8, "max_depth_m": 4.2, "status": "Operational"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.604, 19.045], [74.608, 19.045], [74.609, 19.048], [74.603, 19.048], [74.604, 19.045]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"name": "Village Bandhara Pond", "type": "Check Dam Reservoir", "capacity_tcm": 20.0, "spread_area_ha": 2.2, "max_depth_m": 2.8, "status": "Operational"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.615, 19.040], [74.619, 19.039], [74.618, 19.042], [74.614, 19.042], [74.615, 19.040]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"name": "Community Farm Pond Cluster", "type": "Farm Pond", "capacity_tcm": 15.0, "spread_area_ha": 1.6, "max_depth_m": 3.0, "status": "Operational"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.597, 19.042], [74.600, 19.042], [74.600, 19.044], [74.597, 19.044], [74.597, 19.042]]]
+                }
+            }
+        ]
+    }
+    db.add(GISLayer(
+        watershed_id=ws_hiware.id,
+        layer_type="WATER_BODIES",
+        name="Surface Water Bodies & Reservoirs",
+        format="GEOJSON",
+        data_payload=hb_water,
+        metadata_json={"total_structures": 3, "total_spread_ha": 8.6, "cumulative_capacity_tcm": 80.0}
+    ))
+
+    # 3. LULC (All 5 Categories: Agriculture, Forest/Vegetation, Water, Built-up, Barren/Open Land)
+    hb_lulc = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"class": "Forest/Vegetation", "color": "#2e7d32", "area_ha": 275.0, "description": "Continuous contour plantation and protected social forestry on ridge"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.585, 19.055], [74.601, 19.065], [74.625, 19.068], [74.615, 19.058], [74.585, 19.055]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"class": "Agriculture", "color": "#8bc34a", "area_ha": 420.0, "description": "Irrigated multi-crop agricultural plots (Onion, Gram, Jowar)"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.595, 19.040], [74.615, 19.045], [74.622, 19.036], [74.602, 19.032], [74.595, 19.040]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"class": "Barren/Open Land", "color": "#d4e157", "area_ha": 168.0, "description": "Rocky scrubland with contour bunding and trenches"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.582, 19.035], [74.595, 19.028], [74.602, 19.032], [74.586, 19.045], [74.582, 19.035]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"class": "Built-up", "color": "#ff7043", "area_ha": 68.0, "description": "Gram Panchayat settlement, farm houses, and road network"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.600, 19.047], [74.604, 19.047], [74.604, 19.051], [74.600, 19.051], [74.600, 19.047]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"class": "Water", "color": "#0284c7", "area_ha": 45.0, "description": "Inundated reservoirs, percolation basins, and streams"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.603, 19.045], [74.609, 19.045], [74.609, 19.048], [74.603, 19.048], [74.603, 19.045]]]
+                }
+            }
+        ]
+    }
+    db.add(GISLayer(
+        watershed_id=ws_hiware.id,
+        layer_type="LULC",
+        name="Land Use / Land Cover (LULC)",
+        format="GEOJSON",
+        data_payload=hb_lulc,
+        metadata_json={"classification_standard": "NRSC / LISS-IV 5-Class Standard", "total_area_ha": 976.0}
+    ))
+
+    # 4. Vegetation / NDVI Layer
+    hb_ndvi = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"ndvi_class": "Dense Canopy (>0.6)", "mean_ndvi": 0.68, "area_ha": 312.0, "color": "#1b5e20", "status": "Thriving Vegetation"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.588, 19.057], [74.602, 19.064], [74.622, 19.066], [74.612, 19.057], [74.588, 19.057]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"ndvi_class": "Moderate Canopy (0.4-0.6)", "mean_ndvi": 0.52, "area_ha": 448.0, "color": "#4caf50", "status": "Productive Cropland"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.595, 19.038], [74.618, 19.044], [74.624, 19.035], [74.598, 19.030], [74.595, 19.038]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"ndvi_class": "Low / Scrub (0.2-0.4)", "mean_ndvi": 0.31, "area_ha": 156.0, "color": "#cddc39", "status": "Grassland & Scrub"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.582, 19.036], [74.594, 19.029], [74.600, 19.033], [74.585, 19.044], [74.582, 19.036]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"ndvi_class": "Sparse / Barren (<0.2)", "mean_ndvi": 0.14, "area_ha": 60.0, "color": "#ffe082", "status": "Settlement & Rock Outcrops"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.599, 19.046], [74.605, 19.046], [74.605, 19.052], [74.599, 19.052], [74.599, 19.046]]]
+                }
+            }
+        ]
+    }
+    db.add(GISLayer(
+        watershed_id=ws_hiware.id,
+        layer_type="VEGETATION_NDVI",
+        name="Vegetation Index (NDVI Canopy Vigor)",
+        format="GEOJSON",
+        data_payload=hb_ndvi,
+        metadata_json={
+            "mean_ndvi": 0.62,
+            "dense_canopy_pct": 32.0,
+            "moderate_canopy_pct": 46.0,
+            "low_canopy_pct": 16.0,
+            "sparse_canopy_pct": 6.0,
+            "sensor": "Sentinel-2 MSI Calibrated Surface Reflectance"
+        }
+    ))
+
+    # 5. Elevation & Topographic Contours Layer
+    hb_elevation = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"contour_m": 700, "zone_name": "Ridge Crest (680-715 m)", "slope_pct": "15-25%", "color": "#5d4037", "treatment": "Continuous Contour Trenches (CCT)"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.590, 19.060], [74.605, 19.067], [74.624, 19.068], [74.615, 19.061], [74.590, 19.060]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"contour_m": 650, "zone_name": "Upper Slope (640-680 m)", "slope_pct": "8-15%", "color": "#8d6e63", "treatment": "Loose Boulder Structures & Afforestation"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.586, 19.052], [74.608, 19.058], [74.626, 19.059], [74.610, 19.049], [74.586, 19.052]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"contour_m": 615, "zone_name": "Agricultural Valley Plain (605-640 m)", "slope_pct": "3-8%", "color": "#bcaaa4", "treatment": "Farm Bunding & Check Dams"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.592, 19.036], [74.616, 19.042], [74.624, 19.034], [74.600, 19.030], [74.592, 19.036]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"contour_m": 590, "zone_name": "Stream Bed / Lowland (585-605 m)", "slope_pct": "1-3%", "color": "#d7ccc8", "treatment": "Nala Bandhara & Desilting"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.602, 19.044], [74.618, 19.039], [74.620, 19.041], [74.604, 19.046], [74.602, 19.044]]]
+                }
+            }
+        ]
+    }
+    db.add(GISLayer(
+        watershed_id=ws_hiware.id,
+        layer_type="ELEVATION",
+        name="Elevation & Topographic Hypsometry",
+        format="GEOJSON",
+        data_payload=hb_elevation,
+        metadata_json={
+            "min_elevation_m": 585.0,
+            "max_elevation_m": 715.0,
+            "relief_m": 130.0,
+            "dominant_slope_class": "Gently Sloping (3-8%)",
+            "elevation_bands": [
+                {"name": "Ridge Crest", "range": "680-715 m", "area_ha": 215.0, "pct": 22.0, "slope": "15-25%", "color": "#5d4037"},
+                {"name": "Upper Slopes", "range": "640-680 m", "area_ha": 340.0, "pct": 34.8, "slope": "8-15%", "color": "#8d6e63"},
+                {"name": "Valley Plain", "range": "605-640 m", "area_ha": 325.0, "pct": 33.3, "slope": "3-8%", "color": "#bcaaa4"},
+                {"name": "Stream Bed", "range": "585-605 m", "area_ha": 96.0, "pct": 9.9, "slope": "1-3%", "color": "#d7ccc8"}
+            ]
+        }
+    ))
+
+    # ==========================================
+    # WATERSHED 2: Ralegan Siddhi (Ahmednagar, MH)
+    # ==========================================
+    ws_ralegan = db.query(Watershed).filter(Watershed.code == "WS-MH-AHM-002").first()
+    if not ws_ralegan:
+        ws_ralegan = Watershed(
+            code="WS-MH-AHM-002",
+            name="Ralegan Siddhi Watershed",
+            district_id=ahmednagar.id,
+            state_id=mh.id,
+            area_hectares=1250.0,
+            river_basin="Krishna-Godavari Inter-basin",
+            sub_basin="Ghod River Basin",
+            agro_climatic_zone="Drought Prone Deccan Plateau",
+            primary_drainage="Semi-dendritic system treated with ridge-to-valley structures",
+            health_score=78.0,
+            risk_level="LOW",
+            status="ACTIVE"
+        )
+        db.add(ws_ralegan)
+        db.flush()
+
+        rs_coords = [
+            [74.425, 19.008],
+            [74.442, 19.002],
+            [74.475, 19.015],
+            [74.482, 19.038],
+            [74.468, 19.052],
+            [74.438, 19.045],
+            [74.425, 19.008]
+        ]
+        db.add(WatershedBoundary(
+            watershed_id=ws_ralegan.id,
+            geometry={"type": "Polygon", "coordinates": [rs_coords]},
+            centroid_lat=19.025,
+            centroid_lng=74.452,
+            bbox=[74.425, 19.002, 74.482, 19.052]
+        ))
+
+    # --- Phase 2 GIS Layers for Ralegan Siddhi ---
+    rs_drainage = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"name": "Ralegan Central Stream", "order": 3, "length_km": 5.1, "flow_direction": "South-East", "gradient": "1.5%"},
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": [[74.435, 19.042], [74.448, 19.030], [74.458, 19.020], [74.472, 19.012]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"name": "East Gully Branch", "order": 2, "length_km": 2.8, "flow_direction": "South", "gradient": "3.1%"},
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": [[74.465, 19.045], [74.460, 19.030], [74.458, 19.020]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"name": "North Ridge Stream", "order": 1, "length_km": 1.9, "flow_direction": "South-East", "gradient": "4.2%"},
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": [[74.440, 19.048], [74.444, 19.038], [74.448, 19.030]]
+                }
+            }
+        ]
+    }
+    db.add(GISLayer(
+        watershed_id=ws_ralegan.id,
+        layer_type="DRAINAGE",
+        name="Drainage & Stream Network",
+        format="GEOJSON",
+        data_payload=rs_drainage,
+        metadata_json={"stream_orders": [1, 2, 3], "total_streams": 3, "total_length_km": 9.8, "drainage_density_km_sqkm": 0.78}
+    ))
+
+    rs_water = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"name": "Major Percolation Tank", "type": "Percolation Tank", "capacity_tcm": 60.0, "spread_area_ha": 6.2, "max_depth_m": 4.5, "status": "Operational"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.446, 19.028], [74.452, 19.028], [74.453, 19.032], [74.447, 19.032], [74.446, 19.028]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"name": "Anna Hazare Bandhara Storage", "type": "Check Dam Reservoir", "capacity_tcm": 28.0, "spread_area_ha": 3.1, "max_depth_m": 3.2, "status": "Operational"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.456, 19.019], [74.461, 19.018], [74.460, 19.022], [74.455, 19.022], [74.456, 19.019]]]
+                }
+            }
+        ]
+    }
+    db.add(GISLayer(
+        watershed_id=ws_ralegan.id,
+        layer_type="WATER_BODIES",
+        name="Surface Water Bodies & Reservoirs",
+        format="GEOJSON",
+        data_payload=rs_water,
+        metadata_json={"total_structures": 2, "total_spread_ha": 9.3, "cumulative_capacity_tcm": 88.0}
+    ))
+
+    rs_lulc = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"class": "Forest/Vegetation", "color": "#2e7d32", "area_ha": 360.0, "description": "Afforested hill slopes with native dry deciduous species"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.430, 19.040], [74.450, 19.050], [74.475, 19.045], [74.460, 19.035], [74.430, 19.040]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"class": "Agriculture", "color": "#8bc34a", "area_ha": 540.0, "description": "Double cropped farmland fed by community borewells"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.435, 19.015], [74.465, 19.025], [74.475, 19.015], [74.445, 19.005], [74.435, 19.015]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"class": "Barren/Open Land", "color": "#d4e157", "area_ha": 205.0, "description": "Pastureland with stone bunds and percolation trenches"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.425, 19.008], [74.438, 19.005], [74.442, 19.018], [74.428, 19.025], [74.425, 19.008]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"class": "Built-up", "color": "#ff7043", "area_ha": 85.0, "description": "Ralegan Siddhi village nucleus and dairy cooperative"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.450, 19.025], [74.456, 19.025], [74.456, 19.030], [74.450, 19.030], [74.450, 19.025]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"class": "Water", "color": "#0284c7", "area_ha": 60.0, "description": "Percolation reservoirs and village recharge ponds"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.446, 19.027], [74.453, 19.027], [74.453, 19.033], [74.446, 19.033], [74.446, 19.027]]]
+                }
+            }
+        ]
+    }
+    db.add(GISLayer(
+        watershed_id=ws_ralegan.id,
+        layer_type="LULC",
+        name="Land Use / Land Cover (LULC)",
+        format="GEOJSON",
+        data_payload=rs_lulc,
+        metadata_json={"classification_standard": "NRSC / LISS-IV 5-Class Standard", "total_area_ha": 1250.0}
+    ))
+
+    rs_ndvi = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"ndvi_class": "Dense Canopy (>0.6)", "mean_ndvi": 0.65, "area_ha": 350.0, "color": "#1b5e20", "status": "Forest Canopy"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.432, 19.038], [74.452, 19.048], [74.472, 19.043], [74.458, 19.035], [74.432, 19.038]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"ndvi_class": "Moderate Canopy (0.4-0.6)", "mean_ndvi": 0.51, "area_ha": 550.0, "color": "#4caf50", "status": "Agriculture"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.436, 19.016], [74.464, 19.024], [74.473, 19.016], [74.446, 19.006], [74.436, 19.016]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"ndvi_class": "Low / Scrub (0.2-0.4)", "mean_ndvi": 0.30, "area_ha": 225.0, "color": "#cddc39", "status": "Fallow & Scrub"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.426, 19.010], [74.437, 19.007], [74.441, 19.017], [74.428, 19.023], [74.426, 19.010]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"ndvi_class": "Sparse / Barren (<0.2)", "mean_ndvi": 0.15, "area_ha": 125.0, "color": "#ffe082", "status": "Settlement & Rock"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.449, 19.024], [74.457, 19.024], [74.457, 19.031], [74.449, 19.031], [74.449, 19.024]]]
+                }
+            }
+        ]
+    }
+    db.add(GISLayer(
+        watershed_id=ws_ralegan.id,
+        layer_type="VEGETATION_NDVI",
+        name="Vegetation Index (NDVI Canopy Vigor)",
+        format="GEOJSON",
+        data_payload=rs_ndvi,
+        metadata_json={
+            "mean_ndvi": 0.58,
+            "dense_canopy_pct": 28.0,
+            "moderate_canopy_pct": 44.0,
+            "low_canopy_pct": 18.0,
+            "sparse_canopy_pct": 10.0,
+            "sensor": "Sentinel-2 MSI Calibrated Surface Reflectance"
+        }
+    ))
+
+    rs_elevation = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"contour_m": 720, "zone_name": "Ridge Crest (700-740 m)", "slope_pct": "18-28%", "color": "#5d4037", "treatment": "Ridge Afforestation"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.435, 19.043], [74.455, 19.051], [74.473, 19.046], [74.455, 19.040], [74.435, 19.043]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"contour_m": 660, "zone_name": "Mid Slope (640-700 m)", "slope_pct": "8-15%", "color": "#8d6e63", "treatment": "Contour Bunding"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.432, 19.032], [74.458, 19.038], [74.475, 19.030], [74.450, 19.022], [74.432, 19.032]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"contour_m": 610, "zone_name": "Valley Floor (590-640 m)", "slope_pct": "2-6%", "color": "#bcaaa4", "treatment": "Percolation Tanks"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[74.440, 19.012], [74.468, 19.020], [74.475, 19.012], [74.448, 19.006], [74.440, 19.012]]]
+                }
+            }
+        ]
+    }
+    db.add(GISLayer(
+        watershed_id=ws_ralegan.id,
+        layer_type="ELEVATION",
+        name="Elevation & Topographic Hypsometry",
+        format="GEOJSON",
+        data_payload=rs_elevation,
+        metadata_json={
+            "min_elevation_m": 590.0,
+            "max_elevation_m": 740.0,
+            "relief_m": 150.0,
+            "dominant_slope_class": "Moderately Sloping (8-15%)"
+        }
+    ))
+
+    # ==========================================
+    # WATERSHED 3: Arvari River Catchment (Alwar, RJ)
+    # ==========================================
+    ws_arvari = db.query(Watershed).filter(Watershed.code == "WS-RJ-ALW-003").first()
+    if not ws_arvari:
+        ws_arvari = Watershed(
+            code="WS-RJ-ALW-003",
+            name="Arvari River Catchment & Johad Cluster",
+            district_id=alwar.id,
+            state_id=rj.id,
+            area_hectares=4500.0,
+            river_basin="Yamuna Basin",
+            sub_basin="Banganga-Sabi River System",
+            agro_climatic_zone="Semi-Arid Aravalli Hill Range & Alluvial Plain",
+            primary_drainage="Ephemeral hill torrents recharged via traditional Johad earthen dams",
+            health_score=68.5,
+            risk_level="MEDIUM",
+            status="ACTIVE"
+        )
+        db.add(ws_arvari)
+        db.flush()
+
+        ar_coords = [
+            [76.220, 27.245],
+            [76.255, 27.238],
+            [76.288, 27.265],
+            [76.292, 27.315],
+            [76.262, 27.322],
+            [76.230, 27.295],
+            [76.220, 27.245]
+        ]
+        db.add(WatershedBoundary(
+            watershed_id=ws_arvari.id,
+            geometry={"type": "Polygon", "coordinates": [ar_coords]},
+            centroid_lat=27.280,
+            centroid_lng=76.255,
+            bbox=[76.220, 27.238, 76.292, 27.322]
+        ))
+
+    # --- Phase 2 GIS Layers for Arvari River Catchment ---
+    ar_drainage = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"name": "Arvari Main River Course", "order": 3, "length_km": 11.4, "flow_direction": "Southwards", "gradient": "1.1%"},
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": [[76.235, 27.310], [76.248, 27.285], [76.265, 27.265], [76.280, 27.245]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"name": "Bhanwata Nala", "order": 2, "length_km": 5.2, "flow_direction": "South-East", "gradient": "2.9%"},
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": [[76.275, 27.315], [76.260, 27.290], [76.248, 27.285]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"name": "Hamirpur Hill Stream", "order": 2, "length_km": 4.1, "flow_direction": "Eastwards", "gradient": "3.8%"},
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": [[76.225, 27.270], [76.242, 27.272], [76.265, 27.265]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"name": "Upper Scarp Scour Channel", "order": 1, "length_km": 2.6, "flow_direction": "South", "gradient": "6.2%"},
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": [[76.250, 27.320], [76.245, 27.300], [76.235, 27.310]]
+                }
+            }
+        ]
+    }
+    db.add(GISLayer(
+        watershed_id=ws_arvari.id,
+        layer_type="DRAINAGE",
+        name="Drainage & Stream Network",
+        format="GEOJSON",
+        data_payload=ar_drainage,
+        metadata_json={"stream_orders": [1, 2, 3], "total_streams": 4, "total_length_km": 23.3, "drainage_density_km_sqkm": 0.52}
+    ))
+
+    ar_water = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"name": "Bhanwata Traditional Johad", "type": "Johad Earthen Dam", "capacity_tcm": 85.0, "spread_area_ha": 9.4, "max_depth_m": 4.8, "status": "Operational"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[76.244, 27.282], [76.253, 27.282], [76.254, 27.288], [76.245, 27.288], [76.244, 27.282]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"name": "Hamirpur Check Dam Pond", "type": "Check Dam Reservoir", "capacity_tcm": 45.0, "spread_area_ha": 4.8, "max_depth_m": 3.5, "status": "Operational"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[76.262, 27.262], [76.268, 27.261], [76.267, 27.266], [76.261, 27.266], [76.262, 27.262]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"name": "Community Paal Reservoir", "type": "Percolation Tank", "capacity_tcm": 32.0, "spread_area_ha": 3.5, "max_depth_m": 3.0, "status": "Operational"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[76.275, 27.247], [76.281, 27.245], [76.280, 27.250], [76.274, 27.250], [76.275, 27.247]]]
+                }
+            }
+        ]
+    }
+    db.add(GISLayer(
+        watershed_id=ws_arvari.id,
+        layer_type="WATER_BODIES",
+        name="Surface Water Bodies & Reservoirs",
+        format="GEOJSON",
+        data_payload=ar_water,
+        metadata_json={"total_structures": 3, "total_spread_ha": 17.7, "cumulative_capacity_tcm": 162.0}
+    ))
+
+    ar_lulc = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"class": "Forest/Vegetation", "color": "#2e7d32", "area_ha": 1150.0, "description": "Aravalli rocky hill scrub and community protected groves"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[76.225, 27.290], [76.255, 27.320], [76.290, 27.310], [76.265, 27.285], [76.225, 27.290]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"class": "Agriculture", "color": "#8bc34a", "area_ha": 1850.0, "description": "Alluvial river plain cultivated with Mustard and Wheat"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[76.235, 27.255], [76.270, 27.275], [76.285, 27.250], [76.250, 27.240], [76.235, 27.255]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"class": "Barren/Open Land", "color": "#d4e157", "area_ha": 1030.0, "description": "Gravelly pediment and severely eroded Aravalli foot-slopes"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[76.220, 27.248], [76.236, 27.255], [76.248, 27.242], [76.222, 27.245], [76.220, 27.248]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"class": "Built-up", "color": "#ff7043", "area_ha": 260.0, "description": "Hamirpur, Bhanwata villages and rural homesteads"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[76.250, 27.270], [76.258, 27.270], [76.258, 27.278], [76.250, 27.278], [76.250, 27.270]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"class": "Water", "color": "#0284c7", "area_ha": 210.0, "description": "Johads, stream pools, and percolation tanks"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[76.245, 27.280], [76.255, 27.280], [76.255, 27.290], [76.245, 27.290], [76.245, 27.280]]]
+                }
+            }
+        ]
+    }
+    db.add(GISLayer(
+        watershed_id=ws_arvari.id,
+        layer_type="LULC",
+        name="Land Use / Land Cover (LULC)",
+        format="GEOJSON",
+        data_payload=ar_lulc,
+        metadata_json={"classification_standard": "NRSC / LISS-IV 5-Class Standard", "total_area_ha": 4500.0}
+    ))
+
+    ar_ndvi = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"ndvi_class": "Dense Canopy (>0.6)", "mean_ndvi": 0.63, "area_ha": 810.0, "color": "#1b5e20", "status": "Valley & Riparian Corridor"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[76.242, 27.280], [76.268, 27.270], [76.280, 27.248], [76.258, 27.260], [76.242, 27.280]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"ndvi_class": "Moderate Canopy (0.4-0.6)", "mean_ndvi": 0.49, "area_ha": 1710.0, "color": "#4caf50", "status": "Cultivated Cropland"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[76.234, 27.256], [76.272, 27.276], [76.286, 27.252], [76.248, 27.242], [76.234, 27.256]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"ndvi_class": "Low / Scrub (0.2-0.4)", "mean_ndvi": 0.28, "area_ha": 1260.0, "color": "#cddc39", "status": "Aravalli Scrub & Hillocks"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[76.226, 27.288], [76.254, 27.318], [76.288, 27.308], [76.264, 27.286], [76.226, 27.288]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"ndvi_class": "Sparse / Barren (<0.2)", "mean_ndvi": 0.12, "area_ha": 720.0, "color": "#ffe082", "status": "Barren Scarp & Settlement"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[76.220, 27.246], [76.238, 27.254], [76.248, 27.240], [76.222, 27.244], [76.220, 27.246]]]
+                }
+            }
+        ]
+    }
+    db.add(GISLayer(
+        watershed_id=ws_arvari.id,
+        layer_type="VEGETATION_NDVI",
+        name="Vegetation Index (NDVI Canopy Vigor)",
+        format="GEOJSON",
+        data_payload=ar_ndvi,
+        metadata_json={
+            "mean_ndvi": 0.48,
+            "dense_canopy_pct": 18.0,
+            "moderate_canopy_pct": 38.0,
+            "low_canopy_pct": 28.0,
+            "sparse_canopy_pct": 16.0,
+            "sensor": "Sentinel-2 MSI Calibrated Surface Reflectance"
+        }
+    ))
+
+    ar_elevation = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"contour_m": 520, "zone_name": "Aravalli Ridge Escarpment (450-540 m)", "slope_pct": "20-35%", "color": "#5d4037", "treatment": "Loose Stone Check Dams"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[76.230, 27.300], [76.260, 27.320], [76.290, 27.312], [76.270, 27.295], [76.230, 27.300]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"contour_m": 410, "zone_name": "Upper Foot-slopes (360-450 m)", "slope_pct": "10-20%", "color": "#8d6e63", "treatment": "Gully Plugs & CCT"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[76.228, 27.275], [76.265, 27.285], [76.285, 27.270], [76.255, 27.260], [76.228, 27.275]]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {"contour_m": 310, "zone_name": "Alluvial River Plain (290-360 m)", "slope_pct": "1-4%", "color": "#bcaaa4", "treatment": "Traditional Johad Water Harvesting"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[76.235, 27.250], [76.275, 27.265], [76.285, 27.245], [76.245, 27.238], [76.235, 27.250]]]
+                }
+            }
+        ]
+    }
+    db.add(GISLayer(
+        watershed_id=ws_arvari.id,
+        layer_type="ELEVATION",
+        name="Elevation & Topographic Hypsometry",
+        format="GEOJSON",
+        data_payload=ar_elevation,
+        metadata_json={
+            "min_elevation_m": 290.0,
+            "max_elevation_m": 540.0,
+            "relief_m": 250.0,
+            "dominant_slope_class": "Steep Aravalli Escarpment (15-30%)"
+        }
+    ))
+
+    # Audit log
+    db.add(AuditLog(
+        user_id="system-phase2",
+        action="SEED_PHASE2_GIS_LAYERS",
+        resource_type="GIS_LAYERS",
+        resource_id="ALL",
+        details={"layers_seeded": ["BOUNDARY", "LULC", "DRAINAGE", "WATER_BODIES", "VEGETATION_NDVI", "ELEVATION"], "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()}
+    ))
+
+    db.commit()
+    print("Phase 2 GIS Layer seeding completed successfully for all 3 watersheds!")
+
+def seed_dataset_catalog(db: Session):
+    """Populates baseline dataset catalog with authoritative satellite and GIS layer metadata."""
+    if db.query(GeospatialDataset).first():
+        return
+
+    watersheds = db.query(Watershed).all()
+    if not watersheds:
+        return
+
+    for ws in watersheds:
+        wb = db.query(WatershedBoundary).filter(WatershedBoundary.watershed_id == ws.id).first()
+        bounds = wb.bbox if wb else [74.58, 19.03, 74.63, 19.07]
+
+        # 1. Sentinel-2 L2A Optical
+        db.add(GeospatialDataset(
+            dataset_code=f"DS-{ws.code}-S2L2A",
+            dataset_name=f"Sentinel-2 Level-2A BOA Reflectance — {ws.name}",
+            dataset_type="SATELLITE_OPTICAL",
+            provider="Copernicus Data Space Ecosystem (CDSE)",
+            watershed_id=ws.id,
+            acquisition_date=datetime.datetime(2024, 5, 15, 10, 30),
+            processing_date=datetime.datetime(2024, 5, 16, 2, 0),
+            spatial_resolution="10m VNIR / 20m SWIR",
+            temporal_resolution="5-day revisit",
+            coverage_bounds=bounds,
+            crs="EPSG:4326",
+            provenance="DEMO_DATA",
+            format="GEOTIFF",
+            record_count=6,
+            license_info="Copernicus Open Access / EU Free & Open License",
+            metadata_json={"cloud_cover_pct": 2.1, "processing_level": "Level-2A BOA", "calibrated_indices": ["NDVI", "NDWI", "SMI"]},
+            status="ACTIVE"
+        ))
+
+        # 2. CartoDEM / Elevation
+        db.add(GeospatialDataset(
+            dataset_code=f"DS-{ws.code}-DEM",
+            dataset_name=f"CartoDEM 30m Terrain Hypsometry — {ws.name}",
+            dataset_type="DEM_ELEVATION",
+            provider="ISRO / NRSC Bhuvan",
+            watershed_id=ws.id,
+            acquisition_date=datetime.datetime(2023, 1, 1),
+            processing_date=datetime.datetime(2023, 3, 15),
+            spatial_resolution="30m Ground Resolution",
+            temporal_resolution="Static Baseline",
+            coverage_bounds=bounds,
+            crs="EPSG:4326",
+            provenance="DEMO_DATA",
+            format="GEOJSON",
+            record_count=3,
+            license_info="Open Government Data (OGD) Platform India",
+            metadata_json={"vertical_datum": "EGM96", "terrain_classes": ["Valley", "Footslope", "Escarpment"]},
+            status="ACTIVE"
+        ))
+
+        # 3. LULC Vector
+        db.add(GeospatialDataset(
+            dataset_code=f"DS-{ws.code}-LULC",
+            dataset_name=f"Thematic Land Use / Land Cover Vector 1:50K — {ws.name}",
+            dataset_type="LULC",
+            provider="NRSC Bhuvan / National Remote Sensing Centre",
+            watershed_id=ws.id,
+            acquisition_date=datetime.datetime(2023, 11, 20),
+            processing_date=datetime.datetime(2024, 1, 10),
+            spatial_resolution="1:50,000 Scale (10m effective)",
+            temporal_resolution="Annual Cycle",
+            coverage_bounds=bounds,
+            crs="EPSG:4326",
+            provenance="DEMO_DATA",
+            format="GEOJSON",
+            record_count=5,
+            license_info="National Remote Sensing Centre (NRSC) Open Geoportal",
+            metadata_json={"classes_covered": ["Forest/Vegetation", "Agriculture", "Barren", "Built-up", "Water"]},
+            status="ACTIVE"
+        ))
+
+        # 4. Drainage Network
+        db.add(GeospatialDataset(
+            dataset_code=f"DS-{ws.code}-DRAIN",
+            dataset_name=f"Hydrographic Stream Order Network — {ws.name}",
+            dataset_type="DRAINAGE_NETWORK",
+            provider="Survey of India / HydroSHEDS",
+            watershed_id=ws.id,
+            acquisition_date=datetime.datetime(2022, 6, 1),
+            processing_date=datetime.datetime(2022, 9, 1),
+            spatial_resolution="Vector Streamlines",
+            temporal_resolution="Decadal Topographic Survey",
+            coverage_bounds=bounds,
+            crs="EPSG:4326",
+            provenance="DEMO_DATA",
+            format="GEOJSON",
+            record_count=4,
+            license_info="Survey of India Open Series Maps",
+            metadata_json={"stream_orders": [1, 2, 3]},
+            status="ACTIVE"
+        ))
+
+        # 5. Geo-Tagged Field Audit Photos
+        db.add(GeospatialDataset(
+            dataset_code=f"DS-{ws.code}-PHOTOS",
+            dataset_name=f"Ground-Truth Geo-Tagged Verification Photos — {ws.name}",
+            dataset_type="FIELD_SURVEY",
+            provider="State Watershed Development Mobile Audit",
+            watershed_id=ws.id,
+            acquisition_date=datetime.datetime(2024, 4, 10),
+            processing_date=datetime.datetime(2024, 4, 11),
+            spatial_resolution="Sub-meter Ground GNSS Position",
+            temporal_resolution="Quarterly Audit",
+            coverage_bounds=bounds,
+            crs="EPSG:4326",
+            provenance="DEMO_DATA",
+            format="FIELD_SURVEY",
+            record_count=3,
+            license_info="Departmental Internal Ground Truth Record",
+            metadata_json={"verified_by": "District Watershed Team", "has_exif_gps": True},
+            status="ACTIVE"
+        ))
+
+    db.commit()
+    print("Seeded baseline GeospatialDataset catalog for all demo watersheds.")
+
+def seed_users(db: Session):
+    """
+    Seeds initial institutional demo accounts for SIH evaluation.
+    Clearly marked as demonstration accounts with standard demo password.
+    Never exposes real government or production credentials.
+    """
+    from app.core.security import hash_password
+
+    # Check if admin already exists
+    if db.query(User).filter(User.email == "admin@jaldrishti.gov.in").first():
+        return
+
+    demo_password_hash = hash_password("JalDrishti@2026")
+
+    demo_users = [
+        User(
+            name="Dr. Vikram Rathore",
+            email="admin@jaldrishti.gov.in",
+            password_hash=demo_password_hash,
+            role="ADMIN",
+            organization="Ministry of Jal Shakti / DoLR",
+            designation="National Project Director & System Administrator",
+            is_active=True
+        ),
+        User(
+            name="Dr. Ramesh Patil",
+            email="state.officer@mahawatershed.gov.in",
+            password_hash=demo_password_hash,
+            role="STATE_OFFICER",
+            state_id=1,  # Maharashtra
+            organization="Maharashtra State Watershed Management Agency",
+            designation="Joint Secretary & State Nodal Officer",
+            is_active=True
+        ),
+        User(
+            name="Anil Sharma",
+            email="district.officer@ahmednagar.gov.in",
+            password_hash=demo_password_hash,
+            role="DISTRICT_OFFICER",
+            state_id=1,
+            district_id=1,  # Ahmednagar
+            organization="Ahmednagar District Rural Development Agency",
+            designation="District Project Director",
+            is_active=True
+        ),
+        User(
+            name="Suresh Gaikwad",
+            email="field.hiware@ahmednagar.gov.in",
+            password_hash=demo_password_hash,
+            role="FIELD_OFFICER",
+            state_id=1,
+            district_id=1,
+            watershed_id=1,  # Hiware Bazar
+            organization="Hiware Bazar Watershed Committee",
+            designation="Junior Field Engineer & Geo-Tag Auditor",
+            is_active=True
+        ),
+        User(
+            name="Pooja Iyer",
+            email="analyst@nrsc.isro.gov.in",
+            password_hash=demo_password_hash,
+            role="ANALYST",
+            organization="National Remote Sensing Centre (NRSC / ISRO)",
+            designation="Senior Remote Sensing & GIS Scientist",
+            is_active=True
+        )
+    ]
+
+    for u in demo_users:
+        db.add(u)
+
+    # Seed one sample pending access request for demonstration
+    sample_request = AccessRequest(
+        name="Rajesh Verma",
+        email="r.verma@mprural.gov.in",
+        requested_role="DISTRICT_OFFICER",
+        state_id=2,  # Madhya Pradesh
+        district_id=3,  # Jhabua
+        organization="Jhabua District Watershed Cell",
+        designation="Assistant Project Manager",
+        reason="Official deputation for watershed health monitoring and DPR intervention planning under PMKSY-WDC 2.0.",
+        status="PENDING"
+    )
+    db.add(sample_request)
+
+    db.commit()
+    print("Seeded 5 institutional demo accounts and 1 sample access request for SIH evaluation.")
+
+
