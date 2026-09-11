@@ -12,7 +12,16 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
     
+    PORT: int = 8000
+    
     DATABASE_URL: str = "sqlite:///./jaldrishti.db"
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def assemble_database_url(cls, v: str) -> str:
+        if isinstance(v, str) and v.startswith("postgres://"):
+            return v.replace("postgres://", "postgresql://", 1)
+        return v
     
     CORS_ORIGINS: Union[str, List[str]] = [
         "http://localhost:3000",

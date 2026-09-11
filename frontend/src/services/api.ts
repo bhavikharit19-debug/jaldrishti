@@ -26,16 +26,19 @@ import {
 } from '@/types';
 
 export const getApiBaseUrl = (): string => {
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL;
-  }
+  // In the browser, always route through same-origin /api/v1 so Next.js rewrites proxy to backend.
+  // This avoids CORS preflights, HTTPS mixed-content blocks, and missing protocol issues.
   if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    if (host && host !== 'localhost' && host !== '127.0.0.1') {
-      return `${window.location.origin}/api/v1`;
-    }
+    return '/api/v1';
   }
-  return 'http://localhost:8000/api/v1';
+
+  // On the server (SSR / build time)
+  let raw = process.env.INTERNAL_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+  raw = raw.replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '');
+  if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
+    raw = `https://${raw}`;
+  }
+  return `${raw}/api/v1`;
 };
 
 const API_BASE_URL = {
