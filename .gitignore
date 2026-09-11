@@ -55,3 +55,7 @@ Thumbs.db
 
 # Cloudflared binary
 cloudflared.exe
+
+# Local uploads
+uploads/
+backend/uploads/

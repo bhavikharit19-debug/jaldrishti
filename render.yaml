@@ -16,7 +16,7 @@ services:
       - key: DEBUG
         value: false
       - key: CORS_ORIGINS
-        value: "*"
+        value: '["*"]'
       - key: SECRET_KEY
         generateValue: true
 
