@@ -13,63 +13,87 @@ from data.seed_data import (
     seed_interventions, seed_dataset_catalog, seed_users
 )
 
+import threading
 from sqlalchemy import inspect, text
 
 logger = logging.getLogger("jaldrishti")
 
-def init_db():
-    Base.metadata.create_all(bind=engine)
+_db_initialized = False
+_init_lock = threading.Lock()
+
+def _migrate_schema_columns():
+    """Ensures optional prototype columns exist across tables in both SQLite and PostgreSQL."""
     try:
-        with engine.connect() as conn:
+        with engine.begin() as conn:
             inspector = inspect(conn)
-            tables = inspector.get_table_names()
-            if "observations" in tables:
-                cols = [c["name"] for c in inspector.get_columns("observations")]
-                if "intervention_id" not in cols:
-                    conn.execute(text("ALTER TABLE observations ADD COLUMN intervention_id INTEGER"))
-                    conn.commit()
-            if "predictions" in tables:
-                cols = [c["name"] for c in inspector.get_columns("predictions")]
-                if "model_version" not in cols:
-                    conn.execute(text("ALTER TABLE predictions ADD COLUMN model_version VARCHAR(50) DEFAULT '1.0.0'"))
-                if "status" not in cols:
-                    conn.execute(text("ALTER TABLE predictions ADD COLUMN status VARCHAR(50) DEFAULT 'PROTOTYPE_CALIBRATED'"))
-                if "feature_importances" not in cols:
-                    conn.execute(text("ALTER TABLE predictions ADD COLUMN feature_importances JSON DEFAULT '{}'"))
-                conn.commit()
-            if "risk_assessments" in tables:
-                cols = [c["name"] for c in inspector.get_columns("risk_assessments")]
-                if "contributing_factors" not in cols:
-                    conn.execute(text("ALTER TABLE risk_assessments ADD COLUMN contributing_factors JSON DEFAULT '[]'"))
-                if "model_version" not in cols:
-                    conn.execute(text("ALTER TABLE risk_assessments ADD COLUMN model_version VARCHAR(50) DEFAULT '1.0.0'"))
-                conn.commit()
-            if "recommendations" in tables:
-                cols = [c["name"] for c in inspector.get_columns("recommendations")]
-                if "category" not in cols:
-                    conn.execute(text("ALTER TABLE recommendations ADD COLUMN category VARCHAR(100) DEFAULT 'WATER_HARVESTING'"))
-                conn.commit()
-            if "field_photos" in tables:
-                cols = [c["name"] for c in inspector.get_columns("field_photos")]
-                if "provenance" not in cols:
-                    conn.execute(text("ALTER TABLE field_photos ADD COLUMN provenance VARCHAR(50) DEFAULT 'DEMO_DATA'"))
-                conn.commit()
-            if "interventions" in tables:
-                cols = [c["name"] for c in inspector.get_columns("interventions")]
-                if "source_type" not in cols:
-                    conn.execute(text("ALTER TABLE interventions ADD COLUMN source_type VARCHAR(50) DEFAULT 'DEMO / SEEDED DATA'"))
-                conn.commit()
+            tables = set(inspector.get_table_names())
+            
+            column_migrations = [
+                ("observations", "intervention_id", "ALTER TABLE observations ADD COLUMN intervention_id INTEGER"),
+                ("predictions", "model_version", "ALTER TABLE predictions ADD COLUMN model_version VARCHAR(50) DEFAULT '1.0.0'"),
+                ("predictions", "status", "ALTER TABLE predictions ADD COLUMN status VARCHAR(50) DEFAULT 'PROTOTYPE_CALIBRATED'"),
+                ("predictions", "feature_importances", "ALTER TABLE predictions ADD COLUMN feature_importances JSON DEFAULT '{}'"),
+                ("risk_assessments", "contributing_factors", "ALTER TABLE risk_assessments ADD COLUMN contributing_factors JSON DEFAULT '[]'"),
+                ("risk_assessments", "model_version", "ALTER TABLE risk_assessments ADD COLUMN model_version VARCHAR(50) DEFAULT '1.0.0'"),
+                ("recommendations", "category", "ALTER TABLE recommendations ADD COLUMN category VARCHAR(100) DEFAULT 'WATER_HARVESTING'"),
+                ("field_photos", "provenance", "ALTER TABLE field_photos ADD COLUMN provenance VARCHAR(50) DEFAULT 'DEMO_DATA'"),
+                ("interventions", "source_type", "ALTER TABLE interventions ADD COLUMN source_type VARCHAR(50) DEFAULT 'DEMO / SEEDED DATA'"),
+            ]
+            
+            for table_name, col_name, ddl_sql in column_migrations:
+                if table_name in tables:
+                    try:
+                        existing_cols = {c["name"] for c in inspector.get_columns(table_name)}
+                        if col_name not in existing_cols:
+                            conn.execute(text(ddl_sql))
+                            logger.info(f"Added column '{col_name}' to table '{table_name}'.")
+                    except Exception as ddl_err:
+                        logger.warning(f"Could not verify/add column '{col_name}' on table '{table_name}': {ddl_err}")
     except Exception as e:
         logger.warning(f"Database column verification note: {e}")
-    db = SessionLocal()
-    try:
-        seed_database(db)
-        seed_indicators_and_values(db)
-        seed_interventions(db)
-        seed_dataset_catalog(db)
-        seed_users(db)
-    finally:
-        db.close()
+
+def init_db(force: bool = False):
+    """
+    Initializes database tables, runs safe DDL column additions, and executes seeding stages.
+    Thread-safe and guarded against duplicate redundant runs.
+    Each seeding stage runs in an isolated session so failure in one stage cannot break others.
+    """
+    global _db_initialized
+    with _init_lock:
+        if _db_initialized and not force:
+            logger.debug("Database initialization already completed; skipping redundant run.")
+            return
+
+        # 1. Create all metadata tables
+        try:
+            Base.metadata.create_all(bind=engine)
+        except Exception as e:
+            logger.error(f"Error creating database tables: {e}", exc_info=True)
+
+        # 2. Safely apply column additions
+        _migrate_schema_columns()
+
+        # 3. Resilient individual seeding stages
+        seed_stages = [
+            ("Base Database & Layers", seed_database),
+            ("Indicators & Yearly Values", seed_indicators_and_values),
+            ("Interventions & Observations", seed_interventions),
+            ("Dataset Catalog", seed_dataset_catalog),
+            ("Institutional Demo Users", seed_users),
+        ]
+
+        for stage_name, stage_fn in seed_stages:
+            db = SessionLocal()
+            try:
+                stage_fn(db)
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                logger.error(f"Non-fatal error in seed stage '{stage_name}': {e}", exc_info=True)
+            finally:
+                db.close()
+
+        _db_initialized = True
 
 # Ensure tables and baseline seed exist immediately
 init_db()

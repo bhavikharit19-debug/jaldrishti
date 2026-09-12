@@ -1,6 +1,7 @@
 import datetime
 import json
 from sqlalchemy.orm import Session
+from sqlalchemy import inspect
 from app.models.domain import (
     State, District, Watershed, WatershedBoundary, DataSource,
     GISLayer, FieldPhoto, Observation, Indicator, IndicatorValue,
@@ -1283,14 +1284,42 @@ def seed_interventions(db: Session):
     Seeds calibrated prototype conservation interventions and field inspection observations.
     Clearly marks all records with source_type = 'DEMO / SEEDED DATA'.
     Guaranteed idempotent: safe to execute repeatedly without duplicating interventions or observations.
+    Resilient: validates DB table/column presence dynamically and rolls back on failure.
     """
-    # Map watersheds by code and ID
-    ws_hb = db.query(Watershed).filter(Watershed.code == "WS-MH-AHM-001").first() or db.query(Watershed).filter(Watershed.id == 1).first()
-    ws_rs = db.query(Watershed).filter(Watershed.code == "WS-MH-AHM-002").first() or db.query(Watershed).filter(Watershed.id == 2).first()
-    ws_arv = db.query(Watershed).filter(Watershed.code == "WS-RJ-ALW-003").first() or db.query(Watershed).filter(Watershed.id == 3).first()
+    try:
+        inspector = inspect(db.get_bind())
+        tables = set(inspector.get_table_names())
+        if "interventions" not in tables:
+            print("Table 'interventions' not found; skipping intervention seeding.")
+            return
 
-    if not ws_hb and not ws_rs and not ws_arv:
-        print("Watersheds not found; skipping intervention seeding.")
+        intv_cols = {c["name"] for c in inspector.get_columns("interventions")}
+        obs_cols = {c["name"] for c in inspector.get_columns("observations")} if "observations" in tables else set()
+        has_source_type = "source_type" in intv_cols
+        has_intervention_id = "intervention_id" in obs_cols
+
+        # Robust watershed lookup by code, name keyword, or ID
+        ws_hb = (
+            db.query(Watershed).filter(Watershed.code == "WS-MH-AHM-001").first()
+            or db.query(Watershed).filter(Watershed.name.ilike("%Hiware%")).first()
+            or db.query(Watershed).filter(Watershed.id == 1).first()
+        )
+        ws_rs = (
+            db.query(Watershed).filter(Watershed.code == "WS-MH-AHM-002").first()
+            or db.query(Watershed).filter(Watershed.name.ilike("%Ralegan%")).first()
+            or db.query(Watershed).filter(Watershed.id == 2).first()
+        )
+        ws_arv = (
+            db.query(Watershed).filter(Watershed.code == "WS-RJ-ALW-003").first()
+            or db.query(Watershed).filter(Watershed.name.ilike("%Arvari%")).first()
+            or db.query(Watershed).filter(Watershed.id == 3).first()
+        )
+
+        if not ws_hb and not ws_rs and not ws_arv:
+            print("Watersheds not found; skipping intervention seeding.")
+            return
+    except Exception as inspect_err:
+        print(f"Warning during intervention table/watershed inspection: {inspect_err}")
         return
 
     DEMO_INTERVENTIONS = []
@@ -1643,81 +1672,87 @@ def seed_interventions(db: Session):
     seeded_intv_count = 0
     seeded_obs_count = 0
 
-    for intv_data in DEMO_INTERVENTIONS:
-        code = intv_data["code"]
-        existing = db.query(Intervention).filter(Intervention.code == code).first()
-        
-        if existing:
-            # Update attributes to ensure calibrated values and source_type consistency
-            existing.watershed_id = intv_data["watershed_id"]
-            existing.name = intv_data["name"]
-            existing.intervention_type = intv_data["intervention_type"]
-            existing.status = intv_data["status"]
-            existing.sanction_year = intv_data["sanction_year"]
-            existing.completion_date = intv_data["completion_date"]
-            existing.latitude = intv_data["latitude"]
-            existing.longitude = intv_data["longitude"]
-            existing.target_capacity_cum = intv_data["target_capacity_cum"]
-            existing.beneficiary_count = intv_data["beneficiary_count"]
-            existing.cost_inr = intv_data["cost_inr"]
-            existing.before_metrics = intv_data["before_metrics"]
-            existing.after_metrics = intv_data["after_metrics"]
-            existing.observed_change_summary = intv_data["observed_change_summary"]
-            if hasattr(existing, "source_type"):
-                existing.source_type = intv_data["source_type"]
-            intv_record = existing
-        else:
-            create_kwargs = {
-                "watershed_id": intv_data["watershed_id"],
-                "code": code,
-                "name": intv_data["name"],
-                "intervention_type": intv_data["intervention_type"],
-                "status": intv_data["status"],
-                "sanction_year": intv_data["sanction_year"],
-                "completion_date": intv_data["completion_date"],
-                "latitude": intv_data["latitude"],
-                "longitude": intv_data["longitude"],
-                "target_capacity_cum": intv_data["target_capacity_cum"],
-                "beneficiary_count": intv_data["beneficiary_count"],
-                "cost_inr": intv_data["cost_inr"],
-                "before_metrics": intv_data["before_metrics"],
-                "after_metrics": intv_data["after_metrics"],
-                "observed_change_summary": intv_data["observed_change_summary"]
-            }
-            if hasattr(Intervention, "source_type"):
-                create_kwargs["source_type"] = intv_data["source_type"]
-            intv_record = Intervention(**create_kwargs)
-            db.add(intv_record)
-            db.flush()
-        
-        seeded_intv_count += 1
-
-        # Seed linked inspection observations
-        for obs_def in intv_data.get("observations", []):
-            existing_obs = db.query(Observation).filter(
-                Observation.intervention_id == intv_record.id,
-                Observation.observer_name == obs_def["observer_name"]
-            ).first()
-
-            if existing_obs:
-                existing_obs.condition_rating = obs_def["condition_rating"]
-                existing_obs.remarks = obs_def["remarks"]
-                existing_obs.recommended_action = obs_def["recommended_action"]
-                existing_obs.observation_date = obs_def["observation_date"]
+    try:
+        for intv_data in DEMO_INTERVENTIONS:
+            code = intv_data["code"]
+            existing = db.query(Intervention).filter(Intervention.code == code).first()
+            
+            if existing:
+                # Update attributes to ensure calibrated values and source_type consistency
+                existing.watershed_id = intv_data["watershed_id"]
+                existing.name = intv_data["name"]
+                existing.intervention_type = intv_data["intervention_type"]
+                existing.status = intv_data["status"]
+                existing.sanction_year = intv_data["sanction_year"]
+                existing.completion_date = intv_data["completion_date"]
+                existing.latitude = intv_data["latitude"]
+                existing.longitude = intv_data["longitude"]
+                existing.target_capacity_cum = intv_data["target_capacity_cum"]
+                existing.beneficiary_count = intv_data["beneficiary_count"]
+                existing.cost_inr = intv_data["cost_inr"]
+                existing.before_metrics = intv_data["before_metrics"]
+                existing.after_metrics = intv_data["after_metrics"]
+                existing.observed_change_summary = intv_data["observed_change_summary"]
+                if has_source_type:
+                    existing.source_type = intv_data["source_type"]
+                intv_record = existing
             else:
-                db.add(Observation(
-                    watershed_id=intv_record.watershed_id,
-                    intervention_id=intv_record.id,
-                    observer_name=obs_def["observer_name"],
-                    observation_date=obs_def["observation_date"],
-                    condition_rating=obs_def["condition_rating"],
-                    remarks=obs_def["remarks"],
-                    recommended_action=obs_def["recommended_action"]
-                ))
-            seeded_obs_count += 1
+                create_kwargs = {
+                    "watershed_id": intv_data["watershed_id"],
+                    "code": code,
+                    "name": intv_data["name"],
+                    "intervention_type": intv_data["intervention_type"],
+                    "status": intv_data["status"],
+                    "sanction_year": intv_data["sanction_year"],
+                    "completion_date": intv_data["completion_date"],
+                    "latitude": intv_data["latitude"],
+                    "longitude": intv_data["longitude"],
+                    "target_capacity_cum": intv_data["target_capacity_cum"],
+                    "beneficiary_count": intv_data["beneficiary_count"],
+                    "cost_inr": intv_data["cost_inr"],
+                    "before_metrics": intv_data["before_metrics"],
+                    "after_metrics": intv_data["after_metrics"],
+                    "observed_change_summary": intv_data["observed_change_summary"]
+                }
+                if has_source_type:
+                    create_kwargs["source_type"] = intv_data["source_type"]
+                intv_record = Intervention(**create_kwargs)
+                db.add(intv_record)
+                db.flush()
+            
+            seeded_intv_count += 1
 
-    db.commit()
-    print(f"Seeded/verified {seeded_intv_count} baseline Intervention structures and {seeded_obs_count} field observations.")
+            # Seed linked inspection observations only if intervention_id column exists
+            if has_intervention_id and intv_record.id:
+                for obs_def in intv_data.get("observations", []):
+                    existing_obs = db.query(Observation).filter(
+                        Observation.intervention_id == intv_record.id,
+                        Observation.observer_name == obs_def["observer_name"]
+                    ).first()
+
+                    if existing_obs:
+                        existing_obs.condition_rating = obs_def["condition_rating"]
+                        existing_obs.remarks = obs_def["remarks"]
+                        existing_obs.recommended_action = obs_def["recommended_action"]
+                        existing_obs.observation_date = obs_def["observation_date"]
+                    else:
+                        db.add(Observation(
+                            watershed_id=intv_record.watershed_id,
+                            intervention_id=intv_record.id,
+                            observer_name=obs_def["observer_name"],
+                            observation_date=obs_def["observation_date"],
+                            condition_rating=obs_def["condition_rating"],
+                            remarks=obs_def["remarks"],
+                            recommended_action=obs_def["recommended_action"]
+                        ))
+                    seeded_obs_count += 1
+
+        db.commit()
+        print(f"Seeded/verified {seeded_intv_count} baseline Intervention structures and {seeded_obs_count} field observations.")
+    except Exception as e:
+        db.rollback()
+        print(f"Warning in seed_interventions: {e}")
+        raise
 
 
 
