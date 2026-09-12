@@ -66,7 +66,8 @@ class InterventionService:
             cost_inr=item_in.cost_inr,
             before_metrics=item_in.before_metrics or {},
             after_metrics=item_in.after_metrics or {},
-            observed_change_summary=item_in.observed_change_summary
+            observed_change_summary=item_in.observed_change_summary,
+            source_type=item_in.source_type or "DEMO / SEEDED DATA"
         )
         db.add(intervention)
         db.commit()
@@ -102,6 +103,8 @@ class InterventionService:
             intervention.after_metrics = update_in.after_metrics
         if update_in.observed_change_summary is not None:
             intervention.observed_change_summary = update_in.observed_change_summary
+        if update_in.source_type is not None:
+            intervention.source_type = update_in.source_type
 
         db.commit()
         db.refresh(intervention)

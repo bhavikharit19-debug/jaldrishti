@@ -243,6 +243,7 @@ class Intervention(Base):
     before_metrics = Column(JSON, default=dict)
     after_metrics = Column(JSON, default=dict)
     observed_change_summary = Column(Text)
+    source_type = Column(String(50), default="DEMO / SEEDED DATA")
     
     watershed = relationship("Watershed", back_populates="interventions")
     observations = relationship("Observation", back_populates="intervention", cascade="all, delete-orphan")

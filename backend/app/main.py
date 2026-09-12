@@ -8,7 +8,10 @@ from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.core.database import Base, engine, SessionLocal
 from app.api.v1.router import api_router
-from data.seed_data import seed_database, seed_indicators_and_values, seed_dataset_catalog, seed_users
+from data.seed_data import (
+    seed_database, seed_indicators_and_values,
+    seed_interventions, seed_dataset_catalog, seed_users
+)
 
 from sqlalchemy import inspect, text
 
@@ -51,12 +54,18 @@ def init_db():
                 if "provenance" not in cols:
                     conn.execute(text("ALTER TABLE field_photos ADD COLUMN provenance VARCHAR(50) DEFAULT 'DEMO_DATA'"))
                 conn.commit()
+            if "interventions" in tables:
+                cols = [c["name"] for c in inspector.get_columns("interventions")]
+                if "source_type" not in cols:
+                    conn.execute(text("ALTER TABLE interventions ADD COLUMN source_type VARCHAR(50) DEFAULT 'DEMO / SEEDED DATA'"))
+                conn.commit()
     except Exception as e:
         logger.warning(f"Database column verification note: {e}")
     db = SessionLocal()
     try:
         seed_database(db)
         seed_indicators_and_values(db)
+        seed_interventions(db)
         seed_dataset_catalog(db)
         seed_users(db)
     finally:

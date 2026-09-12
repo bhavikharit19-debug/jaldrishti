@@ -1278,3 +1278,446 @@ def seed_indicators_and_values(db: Session, target_watershed_id: int = None):
     print("Seeded baseline IndicatorValue multi-temporal records for watersheds.")
 
 
+def seed_interventions(db: Session):
+    """
+    Seeds calibrated prototype conservation interventions and field inspection observations.
+    Clearly marks all records with source_type = 'DEMO / SEEDED DATA'.
+    Guaranteed idempotent: safe to execute repeatedly without duplicating interventions or observations.
+    """
+    # Map watersheds by code and ID
+    ws_hb = db.query(Watershed).filter(Watershed.code == "WS-MH-AHM-001").first() or db.query(Watershed).filter(Watershed.id == 1).first()
+    ws_rs = db.query(Watershed).filter(Watershed.code == "WS-MH-AHM-002").first() or db.query(Watershed).filter(Watershed.id == 2).first()
+    ws_arv = db.query(Watershed).filter(Watershed.code == "WS-RJ-ALW-003").first() or db.query(Watershed).filter(Watershed.id == 3).first()
+
+    if not ws_hb and not ws_rs and not ws_arv:
+        print("Watersheds not found; skipping intervention seeding.")
+        return
+
+    DEMO_INTERVENTIONS = []
+
+    if ws_hb:
+        DEMO_INTERVENTIONS.extend([
+            {
+                "watershed_id": ws_hb.id,
+                "code": "INT-HB-CD-01",
+                "name": "Main Stream Cement Nalla Bandhara (CNB-1)",
+                "intervention_type": "CHECK_DAM",
+                "status": "COMPLETED",
+                "sanction_year": 2019,
+                "completion_date": datetime.datetime(2020, 3, 15),
+                "latitude": 19.0465,
+                "longitude": 74.6062,
+                "target_capacity_cum": 8500.0,
+                "beneficiary_count": 85,
+                "cost_inr": 620000.0,
+                "before_metrics": {"water_table_depth_m": 18.2, "storage_tcm": 2.0, "source_type": "DEMO / SEEDED DATA"},
+                "after_metrics": {"water_table_depth_m": 8.4, "storage_tcm": 8.5, "source_type": "DEMO / SEEDED DATA"},
+                "observed_change_summary": "Groundwater recharge zone expanded by 1.8 km down-gradient; shallow open wells retained water through May.",
+                "source_type": "DEMO / SEEDED DATA",
+                "observations": [
+                    {
+                        "observer_name": "Suresh Gaikwad (Junior Field Engineer)",
+                        "observation_date": datetime.datetime(2024, 4, 15, 10, 30),
+                        "condition_rating": "EXCELLENT",
+                        "remarks": "Structure intact post-monsoon; upstream silt trap functioning at 85% efficiency. Water retention sustained through dry spell. (DEMO / SEEDED DATA)",
+                        "recommended_action": "Routine pre-monsoon inspection scheduled for May."
+                    }
+                ]
+            },
+            {
+                "watershed_id": ws_hb.id,
+                "code": "INT-HB-CCT-02",
+                "name": "Upper Ridge Continuous Contour Trenches (CCT)",
+                "intervention_type": "CONTOUR_BUNDING",
+                "status": "COMPLETED",
+                "sanction_year": 2020,
+                "completion_date": datetime.datetime(2021, 5, 20),
+                "latitude": 19.0582,
+                "longitude": 74.6105,
+                "target_capacity_cum": 12000.0,
+                "beneficiary_count": 140,
+                "cost_inr": 890000.0,
+                "before_metrics": {"runoff_coeff": 0.45, "vegetation_cover_pct": 14.0, "source_type": "DEMO / SEEDED DATA"},
+                "after_metrics": {"runoff_coeff": 0.18, "vegetation_cover_pct": 46.0, "source_type": "DEMO / SEEDED DATA"},
+                "observed_change_summary": "Substantial reduction in peak runoff velocity; silt accumulation in lower nala reduced by 72%.",
+                "source_type": "DEMO / SEEDED DATA",
+                "observations": [
+                    {
+                        "observer_name": "Dr. Vikram Rathore (National Project Director)",
+                        "observation_date": datetime.datetime(2024, 5, 2, 11, 0),
+                        "condition_rating": "GOOD",
+                        "remarks": "Continuous trenches along 400m ridge contour stable with grass cover establishment. Runoff arrest verified. (DEMO / SEEDED DATA)",
+                        "recommended_action": "Desilt upper collection trenches before onset of monsoon."
+                    }
+                ]
+            },
+            {
+                "watershed_id": ws_hb.id,
+                "code": "INT-HB-PT-03",
+                "name": "Gaothan Percolation Tank Deepening & Spillway",
+                "intervention_type": "PERCOLATION_TANK",
+                "status": "WORK_IN_PROGRESS",
+                "sanction_year": 2023,
+                "completion_date": None,
+                "latitude": 19.0395,
+                "longitude": 74.6010,
+                "target_capacity_cum": 16000.0,
+                "beneficiary_count": 165,
+                "cost_inr": 1150000.0,
+                "before_metrics": {"annual_percolation_mcm": 0.08, "source_type": "DEMO / SEEDED DATA"},
+                "after_metrics": {"expected_percolation_mcm": 0.22, "source_type": "DEMO / SEEDED DATA"},
+                "observed_change_summary": "Basin de-siltation at 75% progress; percolation velocity improved in trial pit.",
+                "source_type": "DEMO / SEEDED DATA",
+                "observations": []
+            },
+            {
+                "watershed_id": ws_hb.id,
+                "code": "INT-HB-GP-04",
+                "name": "Middle Catchment Sub-surface Dyke & Gabion Plugs",
+                "intervention_type": "GULLY_CONTROL",
+                "status": "SANCTIONED",
+                "sanction_year": 2024,
+                "completion_date": None,
+                "latitude": 19.0512,
+                "longitude": 74.6185,
+                "target_capacity_cum": 4200.0,
+                "beneficiary_count": 55,
+                "cost_inr": 480000.0,
+                "before_metrics": {"erosion_rate_tons_ha": 6.8, "source_type": "DEMO / SEEDED DATA"},
+                "after_metrics": {"expected_soil_retention_pct": 65.0, "source_type": "DEMO / SEEDED DATA"},
+                "observed_change_summary": "Sanctioned under PMKSY-WDC 2.0; geological baseline survey completed.",
+                "source_type": "DEMO / SEEDED DATA",
+                "observations": []
+            },
+            {
+                "watershed_id": ws_hb.id,
+                "code": "INT-HB-FP-05",
+                "name": "Farm Pond Clustered Micro-Recharge Shaft",
+                "intervention_type": "FARM_POND",
+                "status": "PROPOSED",
+                "sanction_year": 2024,
+                "completion_date": None,
+                "latitude": 19.0350,
+                "longitude": 74.5950,
+                "target_capacity_cum": 5500.0,
+                "beneficiary_count": 40,
+                "cost_inr": 320000.0,
+                "before_metrics": {"terminal_monsoon_drying_month": "December", "source_type": "DEMO / SEEDED DATA"},
+                "after_metrics": {"projected_rabi_irrigation_ha": 18.5, "source_type": "DEMO / SEEDED DATA"},
+                "observed_change_summary": "Site pegged; Gram Sabha approval in draft DPR stage.",
+                "source_type": "DEMO / SEEDED DATA",
+                "observations": []
+            }
+        ])
+
+    if ws_rs:
+        DEMO_INTERVENTIONS.extend([
+            {
+                "watershed_id": ws_rs.id,
+                "code": "INT-RS-CD-01",
+                "name": "Main Nalla Masonry Check Dam (MCD-1)",
+                "intervention_type": "CHECK_DAM",
+                "status": "COMPLETED",
+                "sanction_year": 2018,
+                "completion_date": datetime.datetime(2019, 4, 10),
+                "latitude": 19.0225,
+                "longitude": 74.4485,
+                "target_capacity_cum": 9500.0,
+                "beneficiary_count": 95,
+                "cost_inr": 680000.0,
+                "before_metrics": {"dry_season_well_depth_m": 22.4, "source_type": "DEMO / SEEDED DATA"},
+                "after_metrics": {"dry_season_well_depth_m": 9.8, "source_type": "DEMO / SEEDED DATA"},
+                "observed_change_summary": "Perennial saturation observed in downstream community open wells; baseflow sustained.",
+                "source_type": "DEMO / SEEDED DATA",
+                "observations": [
+                    {
+                        "observer_name": "Anil Sharma (District Project Director)",
+                        "observation_date": datetime.datetime(2024, 3, 20, 14, 0),
+                        "condition_rating": "EXCELLENT",
+                        "remarks": "Masonry crest and wing walls structurally sound. Downstream open wells show +2.2m water level elevation compared to baseline. (DEMO / SEEDED DATA)",
+                        "recommended_action": "Maintain downstream apron boulders."
+                    }
+                ]
+            },
+            {
+                "watershed_id": ws_rs.id,
+                "code": "INT-RS-PT-02",
+                "name": "Gaothan Percolation Tank (PT-A)",
+                "intervention_type": "PERCOLATION_TANK",
+                "status": "COMPLETED",
+                "sanction_year": 2019,
+                "completion_date": datetime.datetime(2020, 2, 18),
+                "latitude": 19.0310,
+                "longitude": 74.4550,
+                "target_capacity_cum": 18000.0,
+                "beneficiary_count": 160,
+                "cost_inr": 1250000.0,
+                "before_metrics": {"recharge_zone_radius_km": 0.4, "source_type": "DEMO / SEEDED DATA"},
+                "after_metrics": {"recharge_zone_radius_km": 1.2, "source_type": "DEMO / SEEDED DATA"},
+                "observed_change_summary": "Groundwater table elevated by 2.4m across a 1.2 km radius; post-monsoon storage verified.",
+                "source_type": "DEMO / SEEDED DATA",
+                "observations": [
+                    {
+                        "observer_name": "Dr. Ramesh Patil (State Nodal Officer)",
+                        "observation_date": datetime.datetime(2024, 4, 2, 16, 15),
+                        "condition_rating": "GOOD",
+                        "remarks": "Percolation tank holding capacity measured at 17,200 m³. Sub-surface percolation rate active. (DEMO / SEEDED DATA)",
+                        "recommended_action": "Clear minor weeds near inlet channel."
+                    }
+                ]
+            },
+            {
+                "watershed_id": ws_rs.id,
+                "code": "INT-RS-LBS-03",
+                "name": "Ridge Loose Boulder Structures (LBS-12)",
+                "intervention_type": "GULLY_CONTROL",
+                "status": "WORK_IN_PROGRESS",
+                "sanction_year": 2023,
+                "completion_date": None,
+                "latitude": 19.0380,
+                "longitude": 74.4610,
+                "target_capacity_cum": 3200.0,
+                "beneficiary_count": 45,
+                "cost_inr": 340000.0,
+                "before_metrics": {"gully_advance_rate_m_yr": 1.8, "source_type": "DEMO / SEEDED DATA"},
+                "after_metrics": {"sediment_capture_pct": 68.0, "source_type": "DEMO / SEEDED DATA"},
+                "observed_change_summary": "Gully erosion halted; sediment capture rate ~68% in upper treatment catchment.",
+                "source_type": "DEMO / SEEDED DATA",
+                "observations": []
+            },
+            {
+                "watershed_id": ws_rs.id,
+                "code": "INT-RS-FP-04",
+                "name": "Community Farm Pond Recharge Cluster",
+                "intervention_type": "FARM_POND",
+                "status": "SANCTIONED",
+                "sanction_year": 2024,
+                "completion_date": None,
+                "latitude": 19.0180,
+                "longitude": 74.4420,
+                "target_capacity_cum": 6500.0,
+                "beneficiary_count": 70,
+                "cost_inr": 480000.0,
+                "before_metrics": {"summer_irrigation_deficit_pct": 52.0, "source_type": "DEMO / SEEDED DATA"},
+                "after_metrics": {"projected_kharif_supplementary_ha": 25.0, "source_type": "DEMO / SEEDED DATA"},
+                "observed_change_summary": "Sanctioned under PMKSY-WDC 2.0; site pegged for excavation.",
+                "source_type": "DEMO / SEEDED DATA",
+                "observations": []
+            },
+            {
+                "watershed_id": ws_rs.id,
+                "code": "INT-RS-CCT-05",
+                "name": "North Ridge Continuous Contour Trenches & Grass Seeding",
+                "intervention_type": "CONTOUR_BUNDING",
+                "status": "PROPOSED",
+                "sanction_year": 2024,
+                "completion_date": None,
+                "latitude": 19.0420,
+                "longitude": 74.4680,
+                "target_capacity_cum": 7800.0,
+                "beneficiary_count": 60,
+                "cost_inr": 510000.0,
+                "before_metrics": {"runoff_coeff": 0.48, "source_type": "DEMO / SEEDED DATA"},
+                "after_metrics": {"projected_runoff_coeff": 0.22, "source_type": "DEMO / SEEDED DATA"},
+                "observed_change_summary": "Technical feasibility completed by DRDA team; awaiting administrative sanction.",
+                "source_type": "DEMO / SEEDED DATA",
+                "observations": []
+            }
+        ])
+
+    if ws_arv:
+        DEMO_INTERVENTIONS.extend([
+            {
+                "watershed_id": ws_arv.id,
+                "code": "INT-ARV-JD-01",
+                "name": "Traditional Earthen Johad Catchment Structure",
+                "intervention_type": "WATER_HARVESTING_JOHAD",
+                "status": "COMPLETED",
+                "sanction_year": 2021,
+                "completion_date": datetime.datetime(2022, 2, 10),
+                "latitude": 27.2750,
+                "longitude": 76.2520,
+                "target_capacity_cum": 15000.0,
+                "beneficiary_count": 210,
+                "cost_inr": 750000.0,
+                "before_metrics": {"water_table_depth_m": 35.0, "wells_dry_pct": 80.0, "source_type": "DEMO / SEEDED DATA"},
+                "after_metrics": {"water_table_depth_m": 16.5, "wells_dry_pct": 15.0, "source_type": "DEMO / SEEDED DATA"},
+                "observed_change_summary": "Perennial moisture restored to 14 downstream wells; mustard and wheat double cropping enabled.",
+                "source_type": "DEMO / SEEDED DATA",
+                "observations": [
+                    {
+                        "observer_name": "Field Verification Team (Alwar District Cell)",
+                        "observation_date": datetime.datetime(2024, 3, 10, 15, 30),
+                        "condition_rating": "EXCELLENT",
+                        "remarks": "Traditional earthen Johad embankment well-compacted. 14 downstream dug wells reporting perennial water availability. (DEMO / SEEDED DATA)",
+                        "recommended_action": "Protect downstream earthen bund from cattle trampling."
+                    }
+                ]
+            },
+            {
+                "watershed_id": ws_arv.id,
+                "code": "INT-ARV-AN-02",
+                "name": "Bhanwata Upstream Masonry Anicut",
+                "intervention_type": "CHECK_DAM",
+                "status": "COMPLETED",
+                "sanction_year": 2020,
+                "completion_date": datetime.datetime(2021, 3, 30),
+                "latitude": 27.2620,
+                "longitude": 76.2410,
+                "target_capacity_cum": 22000.0,
+                "beneficiary_count": 280,
+                "cost_inr": 1100000.0,
+                "before_metrics": {"surface_storage_duration_months": 2.0, "source_type": "DEMO / SEEDED DATA"},
+                "after_metrics": {"surface_storage_duration_months": 8.0, "source_type": "DEMO / SEEDED DATA"},
+                "observed_change_summary": "Surface water pool retained through late summer; livestock watering secured.",
+                "source_type": "DEMO / SEEDED DATA",
+                "observations": [
+                    {
+                        "observer_name": "Pooja Iyer (Senior Remote Sensing Scientist)",
+                        "observation_date": datetime.datetime(2024, 4, 18, 12, 45),
+                        "condition_rating": "GOOD",
+                        "remarks": "Masonry weir verified via multi-spectral Sentinel-2 NDWI and on-site ground audit. Surface water ponding sustained through March. (DEMO / SEEDED DATA)",
+                        "recommended_action": "Desiltation recommended in 2027 cycle."
+                    }
+                ]
+            },
+            {
+                "watershed_id": ws_arv.id,
+                "code": "INT-ARV-CCT-03",
+                "name": "Aravalli Ridge Staggered Contour Trenches",
+                "intervention_type": "CONTOUR_BUNDING",
+                "status": "WORK_IN_PROGRESS",
+                "sanction_year": 2023,
+                "completion_date": None,
+                "latitude": 27.2890,
+                "longitude": 76.2680,
+                "target_capacity_cum": 8000.0,
+                "beneficiary_count": 110,
+                "cost_inr": 520000.0,
+                "before_metrics": {"slope_wash_severity": "SEVERE", "source_type": "DEMO / SEEDED DATA"},
+                "after_metrics": {"sediment_trapping_pct": 60.0, "source_type": "DEMO / SEEDED DATA"},
+                "observed_change_summary": "Arrested torrential hill-slope runoff and topsoil detachment; stone pitch completed.",
+                "source_type": "DEMO / SEEDED DATA",
+                "observations": []
+            },
+            {
+                "watershed_id": ws_arv.id,
+                "code": "INT-ARV-AFF-04",
+                "name": "Silvi-Pasture & Dhok Catchment Afforestation",
+                "intervention_type": "AFFORESTATION",
+                "status": "SANCTIONED",
+                "sanction_year": 2024,
+                "completion_date": None,
+                "latitude": 27.2950,
+                "longitude": 76.2750,
+                "target_capacity_cum": 4500.0,
+                "beneficiary_count": 90,
+                "cost_inr": 380000.0,
+                "before_metrics": {"canopy_cover_pct": 6.5, "source_type": "DEMO / SEEDED DATA"},
+                "after_metrics": {"projected_canopy_cover_pct": 28.0, "source_type": "DEMO / SEEDED DATA"},
+                "observed_change_summary": "Community pasture protection initiated with native Anogeissus pendula saplings.",
+                "source_type": "DEMO / SEEDED DATA",
+                "observations": []
+            },
+            {
+                "watershed_id": ws_arv.id,
+                "code": "INT-ARV-RS-05",
+                "name": "Upper Drainage Sub-surface Check Dam & Recharge Shaft",
+                "intervention_type": "CHECK_DAM",
+                "status": "PROPOSED",
+                "sanction_year": 2024,
+                "completion_date": None,
+                "latitude": 27.2710,
+                "longitude": 76.2480,
+                "target_capacity_cum": 9200.0,
+                "beneficiary_count": 125,
+                "cost_inr": 640000.0,
+                "before_metrics": {"monsoon_flash_runoff_duration_hrs": 4.5, "source_type": "DEMO / SEEDED DATA"},
+                "after_metrics": {"projected_baseflow_retention_days": 60.0, "source_type": "DEMO / SEEDED DATA"},
+                "observed_change_summary": "DPR prepared under community consultation; pending district sanction.",
+                "source_type": "DEMO / SEEDED DATA",
+                "observations": []
+            }
+        ])
+
+    seeded_intv_count = 0
+    seeded_obs_count = 0
+
+    for intv_data in DEMO_INTERVENTIONS:
+        code = intv_data["code"]
+        existing = db.query(Intervention).filter(Intervention.code == code).first()
+        
+        if existing:
+            # Update attributes to ensure calibrated values and source_type consistency
+            existing.watershed_id = intv_data["watershed_id"]
+            existing.name = intv_data["name"]
+            existing.intervention_type = intv_data["intervention_type"]
+            existing.status = intv_data["status"]
+            existing.sanction_year = intv_data["sanction_year"]
+            existing.completion_date = intv_data["completion_date"]
+            existing.latitude = intv_data["latitude"]
+            existing.longitude = intv_data["longitude"]
+            existing.target_capacity_cum = intv_data["target_capacity_cum"]
+            existing.beneficiary_count = intv_data["beneficiary_count"]
+            existing.cost_inr = intv_data["cost_inr"]
+            existing.before_metrics = intv_data["before_metrics"]
+            existing.after_metrics = intv_data["after_metrics"]
+            existing.observed_change_summary = intv_data["observed_change_summary"]
+            if hasattr(existing, "source_type"):
+                existing.source_type = intv_data["source_type"]
+            intv_record = existing
+        else:
+            create_kwargs = {
+                "watershed_id": intv_data["watershed_id"],
+                "code": code,
+                "name": intv_data["name"],
+                "intervention_type": intv_data["intervention_type"],
+                "status": intv_data["status"],
+                "sanction_year": intv_data["sanction_year"],
+                "completion_date": intv_data["completion_date"],
+                "latitude": intv_data["latitude"],
+                "longitude": intv_data["longitude"],
+                "target_capacity_cum": intv_data["target_capacity_cum"],
+                "beneficiary_count": intv_data["beneficiary_count"],
+                "cost_inr": intv_data["cost_inr"],
+                "before_metrics": intv_data["before_metrics"],
+                "after_metrics": intv_data["after_metrics"],
+                "observed_change_summary": intv_data["observed_change_summary"]
+            }
+            if hasattr(Intervention, "source_type"):
+                create_kwargs["source_type"] = intv_data["source_type"]
+            intv_record = Intervention(**create_kwargs)
+            db.add(intv_record)
+            db.flush()
+        
+        seeded_intv_count += 1
+
+        # Seed linked inspection observations
+        for obs_def in intv_data.get("observations", []):
+            existing_obs = db.query(Observation).filter(
+                Observation.intervention_id == intv_record.id,
+                Observation.observer_name == obs_def["observer_name"]
+            ).first()
+
+            if existing_obs:
+                existing_obs.condition_rating = obs_def["condition_rating"]
+                existing_obs.remarks = obs_def["remarks"]
+                existing_obs.recommended_action = obs_def["recommended_action"]
+                existing_obs.observation_date = obs_def["observation_date"]
+            else:
+                db.add(Observation(
+                    watershed_id=intv_record.watershed_id,
+                    intervention_id=intv_record.id,
+                    observer_name=obs_def["observer_name"],
+                    observation_date=obs_def["observation_date"],
+                    condition_rating=obs_def["condition_rating"],
+                    remarks=obs_def["remarks"],
+                    recommended_action=obs_def["recommended_action"]
+                ))
+            seeded_obs_count += 1
+
+    db.commit()
+    print(f"Seeded/verified {seeded_intv_count} baseline Intervention structures and {seeded_obs_count} field observations.")
+
+
+

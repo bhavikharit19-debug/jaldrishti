@@ -368,6 +368,7 @@ class InterventionCreate(BaseModel):
     before_metrics: Optional[Dict[str, Any]] = None
     after_metrics: Optional[Dict[str, Any]] = None
     observed_change_summary: Optional[str] = None
+    source_type: Optional[str] = "DEMO / SEEDED DATA"
 
 class InterventionUpdate(BaseModel):
     name: Optional[str] = None
@@ -379,6 +380,7 @@ class InterventionUpdate(BaseModel):
     before_metrics: Optional[Dict[str, Any]] = None
     after_metrics: Optional[Dict[str, Any]] = None
     observed_change_summary: Optional[str] = None
+    source_type: Optional[str] = None
 
 class InterventionItem(BaseModel):
     id: int
@@ -397,6 +399,7 @@ class InterventionItem(BaseModel):
     before_metrics: Optional[Dict[str, Any]] = None
     after_metrics: Optional[Dict[str, Any]] = None
     observed_change_summary: Optional[str] = None
+    source_type: Optional[str] = "DEMO / SEEDED DATA"
     model_config = ConfigDict(from_attributes=True)
 
 # Biophysical Indicators

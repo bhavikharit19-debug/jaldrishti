@@ -259,6 +259,7 @@ export interface InterventionItem {
   before_metrics?: any;
   after_metrics?: any;
   observed_change_summary?: string;
+  source_type?: string;
 }
 
 export interface AlertItem {
