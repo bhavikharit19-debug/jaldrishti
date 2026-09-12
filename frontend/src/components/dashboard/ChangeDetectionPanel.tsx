@@ -18,6 +18,21 @@ interface ChangeDetectionPanelProps {
   watershedId: number;
 }
 
+// Custom Diamond Marker for yearly trajectory points
+const renderDiamondMarker = (props: any): React.ReactElement<SVGElement> => {
+  const { cx = 0, cy = 0, stroke = '#16a34a', fill } = props;
+  const s = 3.5;
+  return (
+    <polygon
+      key={`diamond-${cx}-${cy}`}
+      points={`${cx},${cy - s} ${cx + s},${cy} ${cx},${cy + s} ${cx - s},${cy}`}
+      fill={fill || stroke}
+      stroke={stroke}
+      strokeWidth={1}
+    />
+  );
+};
+
 export const ChangeDetectionPanel: React.FC<ChangeDetectionPanelProps> = ({ watershedId }) => {
   const [fromYear, setFromYear] = useState(2018);
   const [toYear, setToYear] = useState(2024);
@@ -81,7 +96,7 @@ export const ChangeDetectionPanel: React.FC<ChangeDetectionPanelProps> = ({ wate
               onChange={(e) => setToYear(parseInt(e.target.value, 10))}
               className="bg-slate-50 border border-slate-300 text-slate-800 rounded px-2 py-1 font-semibold text-xs"
             >
-              {[2020, 2021, 2022, 2023, 2024].map((y) => (
+              {[2020, 2021, 2022, 2023, 2024, 2025, 2026].map((y) => (
                 <option key={y} value={y} disabled={y <= fromYear}>
                   {y}
                 </option>
@@ -149,7 +164,7 @@ export const ChangeDetectionPanel: React.FC<ChangeDetectionPanelProps> = ({ wate
           <div className="bg-white p-3 rounded-lg border border-slate-200">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                Multi-Year Trajectory (2018-2024 Normalized Biomass & Water Indices)
+                Multi-Year Trajectory (2018-{Math.max(toYear, 2024)} Normalized Biomass & Water Indices)
               </span>
               <span className="text-[10px] text-slate-400 font-mono">Calibrated EO Series</span>
             </div>
@@ -174,7 +189,7 @@ export const ChangeDetectionPanel: React.FC<ChangeDetectionPanelProps> = ({ wate
                     name="Vegetation Index (NDVI)"
                     stroke="#16a34a"
                     strokeWidth={2}
-                    dot={{ r: 3 }}
+                    dot={renderDiamondMarker}
                   />
                   <Line
                     type="monotone"
@@ -182,7 +197,7 @@ export const ChangeDetectionPanel: React.FC<ChangeDetectionPanelProps> = ({ wate
                     name="Water Spread Index (NDWI)"
                     stroke="#0284c7"
                     strokeWidth={2}
-                    dot={{ r: 3 }}
+                    dot={renderDiamondMarker}
                   />
                   <Line
                     type="monotone"
@@ -191,7 +206,7 @@ export const ChangeDetectionPanel: React.FC<ChangeDetectionPanelProps> = ({ wate
                     stroke="#ea580c"
                     strokeWidth={2}
                     strokeDasharray="4 4"
-                    dot={{ r: 3 }}
+                    dot={renderDiamondMarker}
                   />
                 </LineChart>
               </ResponsiveContainer>

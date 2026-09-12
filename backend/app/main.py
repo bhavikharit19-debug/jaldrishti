@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.core.database import Base, engine, SessionLocal
 from app.api.v1.router import api_router
-from data.seed_data import seed_database, seed_dataset_catalog, seed_users
+from data.seed_data import seed_database, seed_indicators_and_values, seed_dataset_catalog, seed_users
 
 from sqlalchemy import inspect, text
 
@@ -56,6 +56,7 @@ def init_db():
     db = SessionLocal()
     try:
         seed_database(db)
+        seed_indicators_and_values(db)
         seed_dataset_catalog(db)
         seed_users(db)
     finally:

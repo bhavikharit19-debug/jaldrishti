@@ -255,3 +255,54 @@ def test_15_non_gov_demo_user_registration_active_immediately_and_can_login():
     assert protected_res.status_code == 200
 
 
+def test_16_change_detection_multi_year_trajectory_and_2026_support():
+    """Verify Change Detection API returns populated trajectory for 2018-2024 and 2026 evaluation years."""
+    token = login_and_get_token("admin@jaldrishti.gov.in")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # 1. Evaluation year 2024 -> returns 2018-2024 (7 points) with real non-zero values
+    res_2024 = client.get("/api/v1/changes?watershed_id=1&from_year=2018&to_year=2024", headers=headers)
+    assert res_2024.status_code == 200
+    data_2024 = res_2024.json()
+    assert len(data_2024["indicators"]) == 5
+    assert len(data_2024["yearly_trends"]) == 7
+    years_2024 = [pt["year"] for pt in data_2024["yearly_trends"]]
+    assert years_2024 == [2018, 2019, 2020, 2021, 2022, 2023, 2024]
+    # Check non-zero series
+    ndvi_2024 = [pt["ndvi"] for pt in data_2024["yearly_trends"]]
+    assert ndvi_2024[0] == 0.42 and ndvi_2024[-1] == 0.62
+    smi_2024 = [pt["soil_moisture"] for pt in data_2024["yearly_trends"]]
+    assert smi_2024[0] == 38.0 and smi_2024[-1] == 60.5
+
+    # Check indicator cards match 2024
+    ndvi_ind_2024 = next(i for i in data_2024["indicators"] if i["indicator_code"] == "NDVI")
+    assert ndvi_ind_2024["from_value"] == 0.42
+    assert ndvi_ind_2024["to_value"] == 0.62
+    assert ndvi_ind_2024["trend"] == "IMPROVED"
+
+    # 2. Evaluation year 2026 -> returns 2018-2026 (9 points) with 2026 evaluation values
+    res_2026 = client.get("/api/v1/changes?watershed_id=1&from_year=2018&to_year=2026", headers=headers)
+    assert res_2026.status_code == 200
+    data_2026 = res_2026.json()
+    assert len(data_2026["yearly_trends"]) == 9
+    years_2026 = [pt["year"] for pt in data_2026["yearly_trends"]]
+    assert years_2026 == [2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026]
+    # Check 2026 evaluation point
+    ndvi_2026 = [pt["ndvi"] for pt in data_2026["yearly_trends"]]
+    assert ndvi_2026[-1] == 0.65
+    smi_2026 = [pt["soil_moisture"] for pt in data_2026["yearly_trends"]]
+    assert smi_2026[-1] == 64.0
+
+    # Check indicator cards match 2026
+    ndvi_ind_2026 = next(i for i in data_2026["indicators"] if i["indicator_code"] == "NDVI")
+    assert ndvi_ind_2026["to_value"] == 0.65
+
+    # 3. RESTful route compatibility (/watersheds/{id}/changes)
+    res_rest = client.get("/api/v1/watersheds/2/changes?from_year=2018&to_year=2024", headers=headers)
+    assert res_rest.status_code == 200
+    data_rest = res_rest.json()
+    assert len(data_rest["yearly_trends"]) == 7
+    assert data_rest["indicators"][0]["to_value"] > 0
+
+
+

@@ -13,6 +13,8 @@ def seed_database(db: Session, force_refresh: bool = False):
     existing_veg = db.query(GISLayer).filter(GISLayer.layer_type == "VEGETATION_NDVI").first()
     if existing_veg and not force_refresh:
         print("Database already contains Phase 2 GIS layers.")
+        # Ensure indicators and yearly values are seeded even if GIS layers already exist
+        seed_indicators_and_values(db)
         return
 
     # If watersheds exist but Phase 2 layers are missing, remove old layers to reseed cleanly
@@ -1161,5 +1163,118 @@ def seed_users(db: Session):
 
     db.commit()
     print("Seeded 5 institutional demo accounts and 1 sample access request for SIH evaluation.")
+
+def seed_indicators_and_values(db: Session, target_watershed_id: int = None):
+    """
+    Seeds calibrated multi-temporal historical (2018-2024) and prototype projection (2025-2026) indicator values.
+    Clearly identifies all values as DEMO DATA / DEMO / SEEDED DATA.
+    Values are deterministic and stable across reloads.
+    """
+    # 1. Ensure the 5 canonical indicators exist
+    indicator_defs = [
+        ("NDVI", "Normalized Difference Vegetation Index", "VEGETATION", "Index (-0.2 to 1.0)", "Vegetation vigor and biomass canopy density derived from optical satellite bands.", 0.25),
+        ("NDWI", "Normalized Difference Water Index", "HYDROLOGICAL", "Index (-1.0 to 1.0)", "Surface water presence and leaf water content.", 0.25),
+        ("SMI", "Soil Moisture Index", "HYDROLOGICAL", "Percentage (%)", "Estimated root-zone moisture level from satellite microwave/optical thermal indices.", 0.20),
+        ("WATER_SPREAD", "Surface Water Spread Area", "HYDROLOGICAL", "Hectares (ha)", "Total surface water spread across water retention structures and ponds.", 0.15),
+        ("EROSION_INDEX", "Soil Loss Susceptibility", "LAND_CONDITION", "Index (0 to 10)", "Soil degradation and sediment detachment propensity based on slope and cover.", 0.15),
+    ]
+
+    for code, name, cat, unit, desc, weight in indicator_defs:
+        if not db.query(Indicator).filter(Indicator.code == code).first():
+            db.add(Indicator(
+                code=code, name=name, category=cat, unit=unit,
+                description=desc, weight_in_health_score=weight
+            ))
+    db.commit()
+
+    ind_map = {ind.code: ind.id for ind in db.query(Indicator).all()}
+
+    # 2. Complete calibrated dataset for Watersheds 1, 2, 3 (2018-2026)
+    CALIBRATED_WATERSHED_SERIES = {
+        1: {  # Hiware Bazar Model Micro-Watershed
+            2018: {"NDVI": (0.42, 42.0), "NDWI": (0.12, 32.0), "SMI": (38.0, 38.0), "WATER_SPREAD": (18.5, 37.0), "EROSION_INDEX": (5.2, 48.0)},
+            2019: {"NDVI": (0.46, 46.0), "NDWI": (0.16, 36.0), "SMI": (42.0, 42.0), "WATER_SPREAD": (24.0, 48.0), "EROSION_INDEX": (4.8, 52.0)},
+            2020: {"NDVI": (0.52, 52.0), "NDWI": (0.22, 42.0), "SMI": (48.5, 48.5), "WATER_SPREAD": (32.0, 64.0), "EROSION_INDEX": (4.1, 59.0)},
+            2021: {"NDVI": (0.55, 55.0), "NDWI": (0.24, 44.0), "SMI": (52.0, 52.0), "WATER_SPREAD": (35.5, 71.0), "EROSION_INDEX": (3.6, 64.0)},
+            2022: {"NDVI": (0.58, 58.0), "NDWI": (0.28, 48.0), "SMI": (55.4, 55.4), "WATER_SPREAD": (38.2, 76.4), "EROSION_INDEX": (3.2, 68.0)},
+            2023: {"NDVI": (0.60, 60.0), "NDWI": (0.29, 49.0), "SMI": (58.0, 58.0), "WATER_SPREAD": (41.0, 82.0), "EROSION_INDEX": (2.9, 71.0)},
+            2024: {"NDVI": (0.62, 62.0), "NDWI": (0.31, 51.0), "SMI": (60.5, 60.5), "WATER_SPREAD": (43.5, 87.0), "EROSION_INDEX": (2.7, 73.0)},
+            2025: {"NDVI": (0.635, 63.5), "NDWI": (0.32, 52.0), "SMI": (62.0, 62.0), "WATER_SPREAD": (44.8, 89.6), "EROSION_INDEX": (2.6, 74.0)},
+            2026: {"NDVI": (0.65, 65.0), "NDWI": (0.33, 53.0), "SMI": (64.0, 64.0), "WATER_SPREAD": (46.0, 92.0), "EROSION_INDEX": (2.5, 75.0)},
+        },
+        2: {  # Ralegan Siddhi Watershed
+            2018: {"NDVI": (0.38, 38.0), "NDWI": (0.10, 30.0), "SMI": (34.0, 34.0), "WATER_SPREAD": (22.0, 44.0), "EROSION_INDEX": (6.0, 40.0)},
+            2019: {"NDVI": (0.42, 42.0), "NDWI": (0.14, 34.0), "SMI": (39.0, 39.0), "WATER_SPREAD": (28.0, 56.0), "EROSION_INDEX": (5.2, 48.0)},
+            2020: {"NDVI": (0.48, 48.0), "NDWI": (0.18, 38.0), "SMI": (44.0, 44.0), "WATER_SPREAD": (36.0, 72.0), "EROSION_INDEX": (4.4, 56.0)},
+            2021: {"NDVI": (0.51, 51.0), "NDWI": (0.21, 41.0), "SMI": (48.0, 48.0), "WATER_SPREAD": (40.0, 80.0), "EROSION_INDEX": (3.8, 62.0)},
+            2022: {"NDVI": (0.53, 53.0), "NDWI": (0.23, 43.0), "SMI": (50.5, 50.5), "WATER_SPREAD": (42.5, 85.0), "EROSION_INDEX": (3.5, 65.0)},
+            2023: {"NDVI": (0.56, 56.0), "NDWI": (0.25, 45.0), "SMI": (53.0, 53.0), "WATER_SPREAD": (45.0, 90.0), "EROSION_INDEX": (3.1, 69.0)},
+            2024: {"NDVI": (0.58, 58.0), "NDWI": (0.27, 47.0), "SMI": (56.0, 56.0), "WATER_SPREAD": (48.0, 96.0), "EROSION_INDEX": (2.9, 71.0)},
+            2025: {"NDVI": (0.595, 59.5), "NDWI": (0.28, 48.0), "SMI": (57.5, 57.5), "WATER_SPREAD": (49.5, 99.0), "EROSION_INDEX": (2.8, 72.0)},
+            2026: {"NDVI": (0.61, 61.0), "NDWI": (0.29, 49.0), "SMI": (59.0, 59.0), "WATER_SPREAD": (51.0, 100.0), "EROSION_INDEX": (2.7, 73.0)},
+        },
+        3: {  # Arvari River Catchment & Johad Cluster
+            2018: {"NDVI": (0.28, 28.0), "NDWI": (0.04, 24.0), "SMI": (22.0, 22.0), "WATER_SPREAD": (15.0, 30.0), "EROSION_INDEX": (7.5, 25.0)},
+            2019: {"NDVI": (0.32, 32.0), "NDWI": (0.08, 28.0), "SMI": (26.0, 26.0), "WATER_SPREAD": (21.0, 42.0), "EROSION_INDEX": (6.8, 32.0)},
+            2020: {"NDVI": (0.37, 37.0), "NDWI": (0.12, 32.0), "SMI": (31.0, 31.0), "WATER_SPREAD": (28.0, 56.0), "EROSION_INDEX": (6.0, 40.0)},
+            2021: {"NDVI": (0.41, 41.0), "NDWI": (0.15, 35.0), "SMI": (36.0, 36.0), "WATER_SPREAD": (34.0, 68.0), "EROSION_INDEX": (5.4, 46.0)},
+            2022: {"NDVI": (0.44, 44.0), "NDWI": (0.18, 38.0), "SMI": (40.0, 40.0), "WATER_SPREAD": (38.0, 76.0), "EROSION_INDEX": (4.9, 51.0)},
+            2023: {"NDVI": (0.46, 46.0), "NDWI": (0.20, 40.0), "SMI": (42.5, 42.5), "WATER_SPREAD": (41.0, 82.0), "EROSION_INDEX": (4.6, 54.0)},
+            2024: {"NDVI": (0.48, 48.0), "NDWI": (0.21, 41.0), "SMI": (45.0, 45.0), "WATER_SPREAD": (44.0, 88.0), "EROSION_INDEX": (4.3, 57.0)},
+            2025: {"NDVI": (0.50, 50.0), "NDWI": (0.22, 42.0), "SMI": (47.0, 47.0), "WATER_SPREAD": (46.0, 92.0), "EROSION_INDEX": (4.1, 59.0)},
+            2026: {"NDVI": (0.52, 52.0), "NDWI": (0.23, 43.0), "SMI": (49.0, 49.0), "WATER_SPREAD": (48.0, 96.0), "EROSION_INDEX": (3.9, 61.0)},
+        }
+    }
+
+    # Determine which watersheds to seed
+    if target_watershed_id is not None:
+        watersheds = db.query(Watershed).filter(Watershed.id == target_watershed_id).all()
+    else:
+        watersheds = db.query(Watershed).all()
+
+    for ws in watersheds:
+        ws_id = ws.id
+        series = CALIBRATED_WATERSHED_SERIES.get(ws_id)
+
+        # For any watershed not in preset dictionary, generate deterministic prototype values
+        if not series:
+            series = {}
+            for yr in range(2018, 2027):
+                t = (yr - 2018) / 8.0
+                series[yr] = {
+                    "NDVI": (round(0.32 + ((ws_id * 7) % 15) * 0.01 + t * 0.22, 3), round(32.0 + t * 30.0, 1)),
+                    "NDWI": (round(0.06 + ((ws_id * 5) % 10) * 0.01 + t * 0.18, 3), round(25.0 + t * 25.0, 1)),
+                    "SMI": (round(28.0 + ((ws_id * 11) % 15) + t * 24.0, 1), round(28.0 + t * 24.0, 1)),
+                    "WATER_SPREAD": (round(16.0 + ((ws_id * 13) % 15) + t * 26.0, 1), round(35.0 + t * 50.0, 1)),
+                    "EROSION_INDEX": (round(6.8 - ((ws_id * 3) % 10) * 0.1 - t * 2.8, 1), round(40.0 + t * 30.0, 1)),
+                }
+
+        # Check existing recorded years for this watershed to avoid duplicate inserts
+        existing_keys = set(
+            (r.indicator_id, r.recorded_year)
+            for r in db.query(IndicatorValue.indicator_id, IndicatorValue.recorded_year)
+            .filter(IndicatorValue.watershed_id == ws_id).all()
+        )
+
+        for year, ind_dict in series.items():
+            source = "DEMO / SEEDED DATA" if year >= 2025 else "DEMO DATA"
+            for code, (val, norm_score) in ind_dict.items():
+                ind_id = ind_map.get(code)
+                if not ind_id:
+                    continue
+                if (ind_id, year) not in existing_keys:
+                    db.add(IndicatorValue(
+                        watershed_id=ws_id,
+                        indicator_id=ind_id,
+                        recorded_year=year,
+                        recorded_month=6,
+                        value=float(val),
+                        normalized_score=float(norm_score),
+                        source_type=source
+                    ))
+                    existing_keys.add((ind_id, year))
+
+    db.commit()
+    print("Seeded baseline IndicatorValue multi-temporal records for watersheds.")
 
 

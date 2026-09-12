@@ -2,6 +2,7 @@ from typing import List
 from sqlalchemy.orm import Session
 from app.models.domain import Watershed, Indicator, IndicatorValue
 from app.schemas.schemas import ChangeDetectionResponse, IndicatorDelta, YearlyDataPoint
+from data.seed_data import seed_indicators_and_values
 
 class ChangeDetectionService:
     @staticmethod
@@ -15,8 +16,13 @@ class ChangeDetectionService:
         if not ws:
             raise ValueError(f"Watershed {watershed_id} not found")
 
+        # 0. Self-healing check: ensure indicator values are present for this watershed
+        has_values = db.query(IndicatorValue).filter(IndicatorValue.watershed_id == watershed_id).first()
+        if not has_values:
+            seed_indicators_and_values(db, target_watershed_id=watershed_id)
+
         # 1. Fetch indicators
-        indicators = db.query(Indicator).all()
+        indicators = db.query(Indicator).order_by(Indicator.id.asc()).all()
         deltas: List[IndicatorDelta] = []
 
         for ind in indicators:
@@ -31,6 +37,19 @@ class ChangeDetectionService:
                 IndicatorValue.indicator_id == ind.id,
                 IndicatorValue.recorded_year == to_year
             ).first()
+
+            # Graceful fallback to earliest/latest available if requested year is not specifically seeded
+            if not val_from:
+                val_from = db.query(IndicatorValue).filter(
+                    IndicatorValue.watershed_id == watershed_id,
+                    IndicatorValue.indicator_id == ind.id
+                ).order_by(IndicatorValue.recorded_year.asc()).first()
+
+            if not val_to:
+                val_to = db.query(IndicatorValue).filter(
+                    IndicatorValue.watershed_id == watershed_id,
+                    IndicatorValue.indicator_id == ind.id
+                ).order_by(IndicatorValue.recorded_year.desc()).first()
 
             v_from = val_from.value if val_from else 0.0
             v_to = val_to.value if val_to else 0.0
@@ -56,14 +75,20 @@ class ChangeDetectionService:
                 trend=trend
             ))
 
-        # 2. Build yearly trajectory series (2018-2024)
-        yearly_points: List[YearlyDataPoint] = []
-        years = sorted(list(set(
+        # 2. Build complete yearly trajectory series
+        all_years = sorted(list(set(
             y[0] for y in db.query(IndicatorValue.recorded_year).filter(
                 IndicatorValue.watershed_id == watershed_id
             ).all()
         )))
 
+        # Multi-year trajectory: at minimum 2018-2024, extended up to to_year (e.g. 2026)
+        cutoff_year = max(to_year, 2024) if to_year else 2024
+        years = [y for y in all_years if y <= cutoff_year]
+        if not years:
+            years = all_years
+
+        yearly_points: List[YearlyDataPoint] = []
         for y in years:
             pt = YearlyDataPoint(
                 year=y,
@@ -89,12 +114,23 @@ class ChangeDetectionService:
                         pt.water_spread_ha = round(v.value, 1)
             yearly_points.append(pt)
 
-        # 3. Summary text
+        # 3. Summary text & clear prototype disclaimer
+        ndvi_delta = next((d.delta_percentage for d in deltas if d.indicator_code == 'NDVI'), 0.0)
+        water_delta = next((d.delta_percentage for d in deltas if d.indicator_code == 'WATER_SPREAD'), 0.0)
         summary = (
             f"Multi-temporal analysis for {ws.name} from {from_year} to {to_year}: "
-            f"Net vegetation vigor (NDVI) shifted by {next((d.delta_percentage for d in deltas if d.indicator_code == 'NDVI'), 0)}%, "
-            f"and surface water retention index expanded by {next((d.delta_percentage for d in deltas if d.indicator_code == 'WATER_SPREAD'), 0)}%. "
+            f"Net vegetation vigor (NDVI) shifted by {ndvi_delta}%, "
+            f"and surface water retention index expanded by {water_delta}%. "
             f"Continuous ridge treatments and community structures have positively stabilized the micro-catchment hydrology."
+        )
+
+        has_projected = to_year > 2024
+        disclaimer = (
+            f"Calibrated multi-temporal dataset spanning 2018-2024 baseline and {to_year} prototype trajectory (DEMO / SEEDED DATA). "
+            f"Official satellite pipeline integration point configured."
+            if has_projected else
+            "Calibrated historical multi-temporal dataset spanning 2018-2024 (DEMO / SEEDED DATA). "
+            "Official satellite pipeline integration point configured."
         )
 
         return ChangeDetectionResponse(
@@ -105,5 +141,5 @@ class ChangeDetectionService:
             yearly_trends=yearly_points,
             summary_analysis=summary,
             priority_hotspots_count=2,
-            disclaimer="Calibrated historical multi-temporal dataset spanning 2018-2024. Official satellite pipeline integration point configured."
+            disclaimer=disclaimer
         )
