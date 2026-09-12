@@ -1,6 +1,9 @@
 /** @type {import('next').NextConfig} */
 function resolveBackendUrl() {
-  let raw = process.env.INTERNAL_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+  const defaultBackend = process.env.NODE_ENV === 'production' 
+    ? 'https://jaldrishti-api-3a8q.onrender.com' 
+    : 'http://127.0.0.1:8000';
+  let raw = process.env.INTERNAL_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || defaultBackend;
   raw = raw.trim().replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '');
 
   // 1. If explicit protocol is already provided
@@ -8,14 +11,17 @@ function resolveBackendUrl() {
     return raw;
   }
 
-  // 2. If it is an internal service name without dots (e.g. Render fromService 'jaldrishti-api')
-  if (!raw.includes('.')) {
-    const port = process.env.BACKEND_PORT || (raw.includes(':') ? '' : ':10000');
-    const hostWithPort = raw.includes(':') ? raw : `${raw}${port}`;
-    return `http://${hostWithPort}`;
+  // 2. Local development without protocol
+  if (raw.startsWith('localhost') || raw.startsWith('127.0.0.1')) {
+    return `http://${raw}`;
   }
 
-  // 3. If it's a public domain with dots (e.g. 'jaldrishti-api.onrender.com')
+  // 3. Render service slug without dots (e.g. 'jaldrishti-api-3a8q')
+  if (!raw.includes('.')) {
+    return `https://${raw}.onrender.com`;
+  }
+
+  // 4. Domain with dots (e.g. 'jaldrishti-api-3a8q.onrender.com')
   return `https://${raw}`;
 }
 

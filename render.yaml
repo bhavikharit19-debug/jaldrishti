@@ -33,14 +33,6 @@ services:
       - key: NODE_VERSION
         value: 20.12.0
       - key: NEXT_PUBLIC_API_URL
-        fromService:
-          type: web
-          name: jaldrishti-api
-          property: host
-      - key: BACKEND_PORT
-        fromService:
-          type: web
-          name: jaldrishti-api
-          property: port
+        value: "https://jaldrishti-api-3a8q.onrender.com"
       - key: INTERNAL_BACKEND_URL
-        value: "http://jaldrishti-api:10000"
+        value: "https://jaldrishti-api-3a8q.onrender.com"
