@@ -26,19 +26,32 @@ import {
 } from '@/types';
 
 export const getApiBaseUrl = (): string => {
-  // In the browser, always route through same-origin /api/v1 so Next.js rewrites proxy to backend.
-  // This avoids CORS preflights, HTTPS mixed-content blocks, and missing protocol issues.
+  // 1. If an explicit absolute HTTP/HTTPS URL is provided, prioritize it
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    let url = process.env.NEXT_PUBLIC_API_URL.trim();
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      url = url.replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '');
+      return `${url}/api/v1`;
+    }
+  }
+
+  // 2. In browser environment:
+  // Default to same-origin /api/v1, proxied to backend by Next.js rewrites
   if (typeof window !== 'undefined') {
     return '/api/v1';
   }
 
-  // On the server (SSR / build time)
+  // 3. On server (SSR / build time)
   let raw = process.env.INTERNAL_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
-  raw = raw.replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '');
-  if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
-    raw = `https://${raw}`;
+  raw = raw.trim().replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '');
+  if (raw.startsWith('http://') || raw.startsWith('https://')) {
+    return `${raw}/api/v1`;
   }
-  return `${raw}/api/v1`;
+  if (!raw.includes('.')) {
+    const port = process.env.BACKEND_PORT || (raw.includes(':') ? '' : ':10000');
+    return `http://${raw}${port}/api/v1`;
+  }
+  return `https://${raw}/api/v1`;
 };
 
 const API_BASE_URL = {
@@ -63,11 +76,49 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
     }
   }
 
-  const res = await fetch(url, {
-    ...options,
-    headers,
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...options,
+      headers,
+    });
+  } catch (err: any) {
+    // If running in browser, url is relative /api/v1, and proxy failed on Render, try sibling API host
+    if (typeof window !== 'undefined' && url.startsWith('/api/v1') && window.location.hostname.includes('onrender.com')) {
+      const fallbackHost = window.location.hostname.replace('-web', '-api').replace('web.', 'api.');
+      if (fallbackHost !== window.location.hostname) {
+        try {
+          const fallbackRes = await fetch(`https://${fallbackHost}${url}`, { ...options, headers });
+          if (fallbackRes.ok) {
+            return fallbackRes.json();
+          }
+        } catch {}
+      }
+    }
+    throw err;
+  }
+
+  // Handle transient 502/503/504 cold-start delays on Render
+  if (!res.ok && [502, 503, 504].includes(res.status) && (!options?.method || options.method === 'GET')) {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    try {
+      res = await fetch(url, { ...options, headers });
+    } catch {}
+  }
+
   if (!res.ok) {
+    // Sibling host fallback on HTTP errors
+    if (typeof window !== 'undefined' && url.startsWith('/api/v1') && window.location.hostname.includes('onrender.com')) {
+      const fallbackHost = window.location.hostname.replace('-web', '-api').replace('web.', 'api.');
+      if (fallbackHost !== window.location.hostname) {
+        try {
+          const fallbackRes = await fetch(`https://${fallbackHost}${url}`, { ...options, headers });
+          if (fallbackRes.ok) {
+            return fallbackRes.json();
+          }
+        } catch {}
+      }
+    }
     const errorText = await res.text();
     throw new Error(`API Error ${res.status}: ${errorText}`);
   }

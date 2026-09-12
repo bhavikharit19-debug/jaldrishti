@@ -37,3 +37,10 @@ services:
           type: web
           name: jaldrishti-api
           property: host
+      - key: BACKEND_PORT
+        fromService:
+          type: web
+          name: jaldrishti-api
+          property: port
+      - key: INTERNAL_BACKEND_URL
+        value: "http://jaldrishti-api:10000"
