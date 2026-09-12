@@ -302,7 +302,13 @@ def register(
             detail="A pending access request for this official email is already awaiting administrative approval."
         )
 
-    # Create inactive user account
+    # Non-government / team demo accounts are active immediately to allow instant login.
+    # Official government domains (.gov.in, .nic.in) require administrative verification.
+    email_clean = reg_in.email.strip().lower()
+    is_gov_domain = email_clean.endswith(".gov.in") or email_clean.endswith(".nic.in")
+    is_active = not is_gov_domain
+
+    # Create user account
     user = User(
         name=reg_in.name.strip(),
         email=reg_in.email.strip(),
@@ -312,11 +318,11 @@ def register(
         district_id=reg_in.district_id,
         organization=reg_in.organization.strip(),
         designation="Field / Departmental Officer",
-        is_active=False
+        is_active=is_active
     )
     db.add(user)
 
-    # Create pending access request for admin workflow
+    # Create access request for admin workflow
     access_req = AccessRequest(
         name=reg_in.name.strip(),
         email=reg_in.email.strip(),
@@ -326,7 +332,7 @@ def register(
         organization=reg_in.organization.strip(),
         designation="Field / Departmental Officer",
         reason="Portal Self-Registration",
-        status="PENDING"
+        status="PENDING" if is_gov_domain else "APPROVED"
     )
     db.add(access_req)
     db.commit()
@@ -335,9 +341,16 @@ def register(
     log_audit_event(
         db, action="USER_REGISTERED", resource_type="USER",
         resource_id=str(user.id), user_id=reg_in.email,
-        details={"requested_role": reg_in.requested_role, "org": reg_in.organization},
+        details={"requested_role": reg_in.requested_role, "org": reg_in.organization, "is_active": is_active},
         ip_address=client_ip
     )
+
+    if is_active:
+        return RegistrationResponse(
+            message="Registration successful. Your account is active and you may now log in.",
+            status="ACTIVE",
+            request_id=access_req.id
+        )
 
     return RegistrationResponse(
         message="Official account registration submitted successfully. Your request has been queued for Administrator verification.",

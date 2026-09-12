@@ -200,3 +200,58 @@ def test_14_demo_accounts_contain_no_real_production_secrets():
         assert "secret" not in acc
         assert "token" not in acc
 
+
+def test_15_non_gov_demo_user_registration_active_immediately_and_can_login():
+    """Verify non-government / team demo user registration is active immediately and can log in without admin approval."""
+    from app.core.database import SessionLocal
+    from app.models.domain import User
+
+    unique_email = f"demo.team_{datetime.datetime.now().timestamp()}@example.com"
+    reg_password = "DemoTeamUserPassword@2026"
+
+    reg_res = client.post(
+        "/api/v1/auth/register",
+        json={
+            "name": "Demo Evaluator User",
+            "email": unique_email,
+            "organization": "Technical Evaluation Team",
+            "state_id": 1,
+            "district_id": 1,
+            "requested_role": "ANALYST",
+            "password": reg_password,
+            "confirm_password": reg_password
+        }
+    )
+    assert reg_res.status_code == 201
+    reg_data = reg_res.json()
+    assert reg_data["status"] == "ACTIVE"
+    assert "active" in reg_data["message"].lower()
+
+    # Verify user in database is active
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == unique_email).first()
+        assert user is not None
+        assert user.is_active is True
+        assert user.role == "ANALYST"
+    finally:
+        db.close()
+
+    # Verify user can log in immediately after registration
+    login_res = client.post(
+        "/api/v1/auth/login",
+        json={"email": unique_email, "password": reg_password}
+    )
+    assert login_res.status_code == 200
+    token_data = login_res.json()
+    assert "access_token" in token_data
+    assert token_data["token_type"] == "bearer"
+    assert token_data["user"]["email"] == unique_email
+    assert token_data["user"]["is_active"] is True
+
+    # Verify that the newly registered user can access protected endpoints with their token
+    auth_header = {"Authorization": f"Bearer {token_data['access_token']}"}
+    protected_res = client.get("/api/v1/watersheds", headers=auth_header)
+    assert protected_res.status_code == 200
+
+

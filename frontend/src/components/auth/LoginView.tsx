@@ -534,7 +534,11 @@ export default function LoginView({ initialTab = 'login' }: { initialTab?: AuthM
                       <div className="p-3 bg-emerald-50 border border-emerald-300 rounded text-xs text-emerald-950 space-y-2">
                         <div className="flex items-center space-x-1.5 text-emerald-900 font-bold">
                           <CheckCircle2 className="h-4 w-4 text-emerald-700" />
-                          <span>Registration Queued for Approval</span>
+                          <span>
+                            {regSuccess.status === 'ACTIVE'
+                              ? 'Registration Successful'
+                              : 'Registration Queued for Approval'}
+                          </span>
                         </div>
                         <p className="text-[11px] text-emerald-800 leading-relaxed">
                           {regSuccess.message}
