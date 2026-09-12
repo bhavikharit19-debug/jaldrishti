@@ -1,4 +1,5 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from app.core.security import require_authenticated_user
 from app.api.v1.endpoints import (
     health, watersheds, gis_layers, field_photos,
     observations, interventions, analytics, predictions,
@@ -8,50 +9,49 @@ from app.api.v1.endpoints import (
 
 api_router = APIRouter()
 
-# Health & Diagnostics
+# Health & Diagnostics (Public)
 api_router.include_router(health.router, tags=["Health"])
 
-# Geographic Hierarchy & Administrative Units
-# (tags configured on endpoint level: Geography & Watersheds)
-api_router.include_router(watersheds.router)
+# Geographic Hierarchy & Administrative Units (Protected: requires valid JWT)
+api_router.include_router(watersheds.router, dependencies=[Depends(require_authenticated_user)])
 
-# Geospatial Layers & Thematic Map Statistics
-api_router.include_router(gis_layers.router)
+# Geospatial Layers & Thematic Map Statistics (Protected: requires valid JWT)
+api_router.include_router(gis_layers.router, dependencies=[Depends(require_authenticated_user)])
 
-# Geo-Tagged Verification Photos & EXIF Metadata
-api_router.include_router(field_photos.router)
+# Geo-Tagged Verification Photos & EXIF Metadata (Protected: requires valid JWT)
+api_router.include_router(field_photos.router, dependencies=[Depends(require_authenticated_user)])
 
-# Ground-Truth Field Inspection Observations
-api_router.include_router(observations.router)
+# Ground-Truth Field Inspection Observations (Protected: requires valid JWT)
+api_router.include_router(observations.router, dependencies=[Depends(require_authenticated_user)])
 
-# Interventions & Structural Monitoring
-api_router.include_router(interventions.router)
+# Interventions & Structural Monitoring (Protected: requires valid JWT)
+api_router.include_router(interventions.router, dependencies=[Depends(require_authenticated_user)])
 
-# Biophysical Analytics & Health Score
-api_router.include_router(analytics.router)
+# Biophysical Analytics & Health Score (Protected: requires valid JWT)
+api_router.include_router(analytics.router, dependencies=[Depends(require_authenticated_user)])
 
-# Machine Learning Predictive Forecasting
-api_router.include_router(predictions.router)
+# Machine Learning Predictive Forecasting (Protected: requires valid JWT)
+api_router.include_router(predictions.router, dependencies=[Depends(require_authenticated_user)])
 
-# Multi-Hazard Risk Assessments
-api_router.include_router(risks.router)
+# Multi-Hazard Risk Assessments (Protected: requires valid JWT)
+api_router.include_router(risks.router, dependencies=[Depends(require_authenticated_user)])
 
-# Decision-Support Intervention Recommendations
-api_router.include_router(recommendations.router)
+# Decision-Support Intervention Recommendations (Protected: requires valid JWT)
+api_router.include_router(recommendations.router, dependencies=[Depends(require_authenticated_user)])
 
-# Environmental Alerts & Monitoring
-api_router.include_router(alerts.router)
+# Environmental Alerts & Monitoring (Protected: requires valid JWT)
+api_router.include_router(alerts.router, dependencies=[Depends(require_authenticated_user)])
 
-# Comprehensive Diagnostic Reports
-api_router.include_router(reports.router)
+# Comprehensive Diagnostic Reports (Protected: requires valid JWT)
+api_router.include_router(reports.router, dependencies=[Depends(require_authenticated_user)])
 
-# Real Data Ingestion & Dataset Catalog
-api_router.include_router(data_integration.router, prefix="/data", tags=["Data Integration"])
+# Real Data Ingestion & Dataset Catalog (Protected: requires valid JWT)
+api_router.include_router(data_integration.router, prefix="/data", tags=["Data Integration"], dependencies=[Depends(require_authenticated_user)])
 
-# Officer Authentication & Access Requests
+# Officer Authentication & Access Requests (Public login/register, protected /me)
 api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 
-# Administrative User Management & Audit
+# Administrative User Management & Audit (Protected: requires ADMIN role)
 api_router.include_router(admin_users.router, prefix="/admin", tags=["User Management & Audit"])
 
 

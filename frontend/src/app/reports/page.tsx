@@ -1,13 +1,16 @@
 'use client';
 import React, { useEffect, useState, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { WatershedReport } from '@/types';
 import { api } from '@/services/api';
+import { useAuth } from '@/context/AuthContext';
 import { Printer, ArrowLeft, ShieldCheck, CheckCircle2, AlertTriangle, FileText, Download } from 'lucide-react';
 import Link from 'next/link';
 import JalDrishtiLogo from '@/components/common/JalDrishtiLogo';
 
 function ReportContent() {
+  const router = useRouter();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const searchParams = useSearchParams();
   const idStr = searchParams.get('id');
   const watershedId = idStr ? parseInt(idStr, 10) : 1;
@@ -17,6 +20,12 @@ function ReportContent() {
   const [risks, setRisks] = useState<any[]>([]);
   const [interventions, setInterventions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.push('/login');
+    }
+  }, [authLoading, isAuthenticated, router]);
 
   useEffect(() => {
     setLoading(true);

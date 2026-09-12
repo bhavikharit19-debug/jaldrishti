@@ -19,6 +19,12 @@ services:
         value: '["*"]'
       - key: SECRET_KEY
         generateValue: true
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: JWT_EXPIRATION_MINUTES
+        value: "1440"
 
   # 2. Next.js Frontend Web Application
   - type: web

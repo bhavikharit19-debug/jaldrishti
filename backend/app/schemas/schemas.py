@@ -540,7 +540,8 @@ class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class LoginRequest(BaseModel):
-    email: str
+    email: Optional[str] = None
+    username: Optional[str] = None
     password: str
     remember_me: bool = False
 

@@ -46,8 +46,17 @@ import {
   Maximize2
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const { user, isAuthenticated, isLoading } = useAuth();
+
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.push('/login');
+    }
+  }, [isLoading, isAuthenticated, router]);
   // Master Catchment State
   const [states, setStates] = useState<StateHierarchy[]>([]);
   const [watersheds, setWatersheds] = useState<WatershedListItem[]>([]);
@@ -89,8 +98,6 @@ export default function DashboardPage() {
   const [isDataModalOpen, setIsDataModalOpen] = useState(false);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-
-  const { user } = useAuth();
 
   // 1. Initial Load: States hierarchy and watersheds list
   useEffect(() => {

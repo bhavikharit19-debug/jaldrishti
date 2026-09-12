@@ -38,17 +38,34 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
 
 def create_access_token(data: dict, expires_delta: Optional[datetime.timedelta] = None) -> str:
-    """Generate a signed PyJWT token with expiration claim."""
-    to_encode = data.copy()
-    expire = datetime.datetime.utcnow() + (
-        expires_delta or datetime.timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    """
+    Generate a signed stateless PyJWT token containing only necessary claims:
+    - user_id
+    - role
+    - issued_at (iat)
+    - expiration (exp)
+    - sub (subject)
+    """
+    now = datetime.datetime.now(datetime.timezone.utc)
+    expire = now + (
+        expires_delta or datetime.timedelta(minutes=settings.jwt_expiration_minutes)
     )
-    to_encode.update({"exp": expire, "iat": datetime.datetime.utcnow()})
-    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    user_id = data.get("user_id") or data.get("sub")
+    role = data.get("role")
+    role_str = role.value if hasattr(role, "value") else str(role) if role is not None else "ANALYST"
+    
+    to_encode = {
+        "sub": str(user_id) if user_id is not None else "",
+        "user_id": int(user_id) if isinstance(user_id, int) or (isinstance(user_id, str) and user_id.isdigit()) else user_id,
+        "role": role_str,
+        "iat": int(now.timestamp()),
+        "exp": int(expire.timestamp())
+    }
+    return jwt.encode(to_encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 def decode_access_token(token: str) -> dict:
-    """Decode and validate a signed JWT token."""
-    return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+    """Decode and validate a signed JWT token against secret and algorithm."""
+    return jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
 
 class RequestUser:
     """Represents the context of the calling user during request processing."""
@@ -93,21 +110,20 @@ def get_current_user(
     db: Session = Depends(get_db)
 ) -> RequestUser:
     """
-    Resolves the calling officer's identity and jurisdictional scope.
-    1. If a Bearer token is passed, strictly decodes and validates against the database.
-    2. If developer headers are passed, constructs a RequestUser accordingly.
-    3. If unauthenticated, gracefully defaults to an unauthenticated ANALYST context
-       to maintain backward compatibility for existing read/demo endpoints.
+    Resolves the calling officer's identity from a stateless JWT Bearer token.
+    1. If a Bearer token is provided: verifies signature, expiration, and user account.
+    2. If developer test headers are passed: constructs a RequestUser context for automated test harnesses.
+    3. If neither: returns an unauthenticated RequestUser context (which fails require_authenticated_user).
     """
     if auth_creds and auth_creds.credentials:
         token = auth_creds.credentials
         try:
             payload = decode_access_token(token)
-            email: str = payload.get("sub")
-            if not email:
+            user_id = payload.get("user_id") or payload.get("sub")
+            if not user_id:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid authentication token payload",
+                    detail="Invalid authentication token: missing user_id claim",
                     headers={"WWW-Authenticate": "Bearer"}
                 )
         except jwt.ExpiredSignatureError:
@@ -119,11 +135,19 @@ def get_current_user(
         except jwt.PyJWTError:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Could not validate credentials",
+                detail="Could not validate credentials: invalid token signature or format",
                 headers={"WWW-Authenticate": "Bearer"}
             )
 
-        db_user = db.query(User).filter(User.email == email).first()
+        db_user = None
+        try:
+            int_id = int(user_id)
+            db_user = db.query(User).filter(User.id == int_id).first()
+        except (ValueError, TypeError):
+            pass
+        if not db_user:
+            db_user = db.query(User).filter(User.email == str(user_id)).first()
+
         if not db_user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -170,11 +194,11 @@ def get_current_user(
             is_authenticated=True
         )
 
-    # Unauthenticated default (backward compatibility for public/demo endpoints)
+    # Unauthenticated default (triggers 401 on require_authenticated_user)
     return RequestUser(
         user_id="anonymous",
         role=UserRole.ANALYST,
-        email="guest@jaldrishti.gov.in",
+        email="",
         name="Guest Viewer",
         state_id=None,
         district_id=None,

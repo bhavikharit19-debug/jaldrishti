@@ -28,16 +28,27 @@ router = APIRouter()
 @router.post("/login", response_model=TokenResponse, summary="Officer institutional login")
 def login(login_data: LoginRequest, request: Request, db: Session = Depends(get_db)):
     """
-    Authenticates a departmental officer or system administrator using email/username and password.
-    Returns a signed PyJWT bearer token and complete user profile.
+    Authenticates a departmental officer or system administrator using email or username and password.
+    Returns a signed stateless PyJWT bearer token and complete user profile.
     """
     client_ip = request.client.host if request.client else "unknown"
-    user = db.query(User).filter(User.email == login_data.email.strip()).first()
+    identifier = (login_data.email or login_data.username or "").strip()
+
+    if not identifier or not login_data.password:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid official email or password",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    user = db.query(User).filter(
+        (User.email == identifier) | (User.name == identifier)
+    ).first()
 
     if not user:
         log_audit_event(
             db, action="LOGIN_FAILED", resource_type="AUTH",
-            resource_id=login_data.email, user_id=login_data.email,
+            resource_id=identifier, user_id=identifier,
             details={"reason": "User not found"}, ip_address=client_ip
         )
         raise HTTPException(
@@ -71,19 +82,16 @@ def login(login_data: LoginRequest, request: Request, db: Session = Depends(get_
         )
 
     # Update last login timestamp
-    user.last_login = datetime.datetime.utcnow()
+    user.last_login = datetime.datetime.now(datetime.timezone.utc)
     db.commit()
 
-    # Generate token
-    expires_delta = datetime.timedelta(days=7) if login_data.remember_me else datetime.timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    # Generate token with strictly necessary claims
+    expires_delta = datetime.timedelta(days=7) if login_data.remember_me else datetime.timedelta(minutes=settings.jwt_expiration_minutes)
     token = create_access_token(
         data={
-            "sub": user.email,
-            "role": user.role,
+            "sub": str(user.id),
             "user_id": user.id,
-            "state_id": user.state_id,
-            "district_id": user.district_id,
-            "watershed_id": user.watershed_id
+            "role": user.role,
         },
         expires_delta=expires_delta
     )
